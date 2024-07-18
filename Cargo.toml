@@ -1,0 +1,19 @@
+[package]
+name = "ray-tracer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cgmath = "0.18.0"
+glow = "0.13.1"
+slint = "1.6.0"
+web-sys = { version = "0.3.69", features = ["Window"] }
+web-time = "1.1.0"
+wasm-bindgen = "0.2.92"
+bytemuck = "1.16.1"
+tobj = "4.0.2"
+image = "0.25.1"
+rand = "0.8.5"
+
+[build-dependencies]
+slint-build = "1.6.0"

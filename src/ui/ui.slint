@@ -1,0 +1,142 @@
+import { ScrollView, Button, CheckBox, SpinBox, Slider, GroupBox, LineEdit, StandardListView,
+    ComboBox, HorizontalBox, VerticalBox, GridBox, TabWidget, TextEdit } from "std-widgets.slint";
+
+export component App inherits Window {
+    out property <bool> movement-up;
+    out property <bool> movement-down;
+    out property <bool> movement-left;
+    out property <bool> movement-right;
+    out property <bool> movement-float;
+    out property <bool> movement-drown;
+    out property <length> mouse-position-x <=> touch-area.mouse-x;
+    out property <length> mouse-position-y <=> touch-area.mouse-y;
+    out property <bool> mouse-pressed <=> touch-area.pressed;
+
+    out property <length> mouse-wheel-offset;
+
+    in property <string> fps;
+
+    out property <float> sample-counts: 10.0;
+
+    out property <float> depths: 20.0;
+
+    out property <float> index: 0.0;
+
+    preferred-width: 800px;
+    preferred-height: 600px;
+    title <=> fps;
+    VerticalLayout {
+        TabWidget {
+            Tab {
+                title: "Renderer";
+            }
+
+            Tab {
+                title: "General";
+                Rectangle {
+                    background: #f2f2f2;
+                    VerticalLayout {
+                        HorizontalLayout {
+
+                            VerticalBox {
+                                width: 50%;
+                                Text {
+                                    text: "Sample Counts: " + round(sample-counts);
+                                    color: black;
+                                }
+
+                                Slider {
+                                    value <=> sample-counts;
+                                    minimum: 1;
+                                    maximum: 1000;
+                                }
+                            }
+
+                            VerticalBox {
+                                width: 50%;
+
+                                Text {
+                                    text: "Depths: " + round(depths);
+                                    color: black;
+                                }
+
+                                Slider {
+                                    value <=> depths;
+                                    minimum: 0;
+                                    maximum: 100;
+                                }
+                            }
+                        }
+
+                        HorizontalLayout { }
+                    }
+                }
+            }
+
+            Tab {
+                title: "Model";
+                Rectangle {
+                    //
+            }
+            }
+        }
+
+        Rectangle {
+            width: 100%;
+            height: 100%;
+            touch-area := TouchArea {
+                width: 100%;
+                height: 100%;
+                scroll-event(event) => {
+                    mouse-wheel-offset = event.delta-y;
+                    accept
+                }
+            }
+        }
+    }
+
+    key-handler := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.UpArrow) {
+                movement-up = true;
+            }
+            if (event.text == Key.DownArrow) {
+                movement-down = true;
+            }
+            if (event.text == Key.LeftArrow) {
+                movement-left = true;
+            }
+            if (event.text == Key.RightArrow) {
+                movement-right = true;
+            }
+            if (event.text == Key.Space) {
+                movement-float = true;
+            }
+            if (event.text == Key.Meta) {
+                movement-drown = true;
+            }
+            accept
+        }
+        key-released(event) => {
+            if (event.text == Key.UpArrow) {
+                movement-up = false;
+            }
+            if (event.text == Key.DownArrow) {
+                movement-down = false;
+            }
+            if (event.text == Key.LeftArrow) {
+                movement-left = false;
+            }
+            if (event.text == Key.RightArrow) {
+                movement-right = false;
+            }
+            if (event.text == Key.Space) {
+                movement-float = false;
+            }
+            if (event.text == Key.Meta) {
+                movement-drown = false;
+            }
+            accept
+        }
+    }
+}
