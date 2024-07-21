@@ -1,10 +1,12 @@
 slint::include_modules!();
-pub mod shader;
-pub mod renderer;
+pub mod aabb;
+pub mod bvh;
+pub mod camera;
+pub mod fbo;
 pub mod mesh;
 pub mod model;
-pub mod camera;
+pub mod object;
+pub mod renderer;
 pub mod screen;
-pub mod fbo;
-pub mod texture;
+pub mod shader;
 pub mod utils;

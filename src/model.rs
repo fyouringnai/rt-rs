@@ -6,7 +6,9 @@ use image::DynamicImage::{ImageLuma8, ImageLumaA8, ImageRgb8, ImageRgba8};
 use tobj::{load_obj, GPU_LOAD_OPTIONS};
 
 use crate::mesh::{Mesh, Texture, Vertex};
+use crate::object::Object;
 use crate::shader::Shader;
+use crate::utils::MATERIAL::DIFFUSE;
 
 #[derive(Default)]
 pub struct Model {
@@ -25,6 +27,31 @@ impl Model {
     pub unsafe fn draw(&self, gl: &Context, shader: &Shader) {
         for mesh in &self.mesh {
             mesh.draw(gl, shader);
+        }
+    }
+
+    pub fn get_primitives(&self, primitives: &mut Vec<Object>) {
+        let mut vertices = Vec::new();
+        let mut vertices_num = 0;
+        for (_i, mesh) in self.mesh.iter().enumerate() {
+            for vertex in &mesh.vertices {
+                let tex_coord = [vertex.tex_coord[0], vertex.tex_coord[1], 0.0];
+
+                vertices.push(vertex.position);
+                vertices.push(vertex.normal);
+                vertices.push(tex_coord);
+                if vertices_num % 3 == 2 {
+                    let mut vertex = Vec::new();
+                    for i in 0..3 {
+                        vertex.push(vertices[(vertices_num - (2 - i)) as usize * 3]);
+                        vertex.push(vertices[(vertices_num - (2 - i)) as usize * 3 + 1]);
+                        vertex.push(vertices[(vertices_num - (2 - i)) as usize * 3 + 2]);
+                    }
+                    let triangle = Object::new_triangle(vertex, DIFFUSE);
+                    primitives.push(triangle);
+                }
+                vertices_num += 1;
+            }
         }
     }
 

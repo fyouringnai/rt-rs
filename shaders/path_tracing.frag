@@ -23,6 +23,7 @@ struct Ray
 {
     vec3 origin;
     vec3 direction;
+    float hitMin;
 };
 
 struct Sphere
@@ -45,13 +46,26 @@ uniform Triangle triangle[2];
 
 struct hitRecord
 {
-    float t;
     vec3 p;
+    float hitMin;
     vec3 normal;
     int material;
     vec3 albedo;
 };
 hitRecord rec;
+
+struct aabb
+{
+    vec3 minb, maxb;
+};
+
+struct LinearBVHNode
+{
+    vec3 minb, maxb;
+    float primitives_num;
+    float axis;
+    float child_offset;
+};
 
 uint wseed;
 float randcore(uint seed);
@@ -60,17 +74,19 @@ float rand();
 float hitSphere(Sphere sphere, Ray r);
 bool hitWorld(Ray r);
 vec3 shading(Ray r);
+bool intersectAABB(Ray r, aabb box, vec3 invDir, int dirIsNeg[3]);
 
 uniform sampler2D historyTexture;
-uniform sampler2D position_texture;
-uniform sampler2D normal_texture;
-uniform sampler2D texcoord_texture;
+uniform sampler2D vertices_texture;
+uniform sampler2D bvh_texture;
+
 uniform sampler2D diffuse_texture0;
 uniform sampler2D diffuse_texture1;
 uniform sampler2D diffuse_texture2;
 uniform sampler2D diffuse_texture3;
 uniform sampler2D diffuse_texture4;
 uniform int verticesNum;
+uniform int nodeNum;
 uniform float randOrigin;
 uniform int depths;
 uniform float index;
@@ -90,11 +106,12 @@ void main()
     ray.origin = camera.camPos;
     ray.direction = normalize(camera.leftbottom + (2.0 * camera.halfW * (TexCoords.x + offset.x)) * camera.right +
                               (2.0 * camera.halfH * (TexCoords.y + offset.y)) * camera.up);
+    ray.hitMin = 3.402823466e+38;
 
     vec3 color = shading(ray);
     color = mix(historyColor, color, 1.0 / float(camera.LoopNum));
 
-    // FragColor = vec4(abs(getData(position_texture, index)), 1.0);
+    // FragColor = vec4((getData(bvh_texture, index)), 1.0);
     FragColor = vec4(color, 1.0);
 }
 
@@ -141,11 +158,22 @@ Triangle getTriangle(int index)
     Triangle tri;
     for (int i = 0; i < 3; i++)
     {
-        tri.v[i] = getData(position_texture, float(index * 3 + i));
-        tri.n[i] = getData(normal_texture, float(index * 3 + i));
-        tri.uv[i] = getData(texcoord_texture, float(index * 3 + i));
+        tri.v[i] = getData(vertices_texture, float(index * 9 + i * 3));
+        tri.n[i] = getData(vertices_texture, float(index * 9 + i * 3 + 3));
+        tri.uv[i] = getData(vertices_texture, float(index * 9 + i * 3 + 6));
     }
     return tri;
+}
+
+LinearBVHNode getBVHNode(int index)
+{
+    LinearBVHNode node;
+    node.minb = getData(bvh_texture, float(index * 3));
+    node.maxb = getData(bvh_texture, float(index * 3 + 1));
+    node.child_offset = getData(bvh_texture, float(index * 3 + 2)).x;
+    node.primitives_num = getData(bvh_texture, float(index * 3 + 2)).y;
+    node.axis = getData(bvh_texture, float(index * 3 + 2)).z;
+    return node;
 }
 
 vec3 diffuse(vec3 normal)
@@ -208,6 +236,75 @@ float hitTriangle(Triangle triangle, Ray r)
     }
 }
 
+bool intersectBVH(Ray r)
+{
+    vec3 invDir = 1.0 / r.direction;
+    bool hit = false;
+    int dirIsNeg[3];
+    dirIsNeg[0] = invDir.x < 0.0 ? 1 : 0;
+    dirIsNeg[1] = invDir.y < 0.0 ? 1 : 0;
+    dirIsNeg[2] = invDir.z < 0.0 ? 1 : 0;
+    int toVisitOffset = 0, currentNodeIndex = 0;
+    int nodesToVisit[64];
+    Triangle tri;
+    while (true)
+    {
+        LinearBVHNode node = getBVHNode(currentNodeIndex);
+        aabb box;
+        box.minb = node.minb;
+        box.maxb = node.maxb;
+        if (intersectAABB(r, box, invDir, dirIsNeg))
+        {
+            if (node.primitives_num > 0.0)
+            {
+                for (int i = 0; i < node.primitives_num; i++)
+                {
+                    Triangle tri_t = getTriangle(int(node.child_offset + i));
+                    float dis_t = hitTriangle(tri_t, r);
+                    if (dis_t > 0.0 && dis_t < r.hitMin)
+                    {
+                        r.hitMin = dis_t;
+                        hit = true;
+                        tri = tri_t;
+                    }
+                }
+                if (toVisitOffset == 0)
+                    break;
+                currentNodeIndex = nodesToVisit[--toVisitOffset];
+            }
+            else
+            {
+                if (bool(dirIsNeg[int(node.axis)]))
+                {
+                    nodesToVisit[toVisitOffset++] = currentNodeIndex + 1;
+                    currentNodeIndex = int(node.child_offset);
+                }
+                else
+                {
+                    nodesToVisit[toVisitOffset++] = int(node.child_offset);
+                    currentNodeIndex = currentNodeIndex + 1;
+                }
+            }
+        }
+        else
+        {
+            if (toVisitOffset == 0)
+                break;
+            currentNodeIndex = nodesToVisit[--toVisitOffset];
+        }
+    }
+    if (hit)
+    {
+        rec.p = r.origin + r.hitMin * r.direction;
+        rec.normal = normalize(cross(tri.v[1] - tri.v[0], tri.v[2] - tri.v[0]));
+        rec.material = 0;
+        rec.albedo = vec3(0.5, 0.5, 1.0);
+        rec.hitMin = r.hitMin;
+        setNormal(r);
+    }
+    return hit;
+}
+
 bool hitWorld(Ray r)
 {
     float dist = 3.402823466e+38;
@@ -216,28 +313,29 @@ bool hitWorld(Ray r)
     int hitSphereIndex;
     int hitTriangleIndex;
     /*
-    for (int i = 0; i < 4; i++)
-    {
-        float dis_t = hitSphere(sphere[i], r);
-        if (dis_t > 0 && dis_t < dist)
+        for (int i = 0; i < 4; i++)
         {
-            dist = dis_t;
-            hitSphereIndex = i;
-            ifHitSphere = true;
+            float dis_t = hitSphere(sphere[i], r);
+            if (dis_t > 0 && dis_t < dist)
+            {
+                dist = dis_t;
+                hitSphereIndex = i;
+                ifHitSphere = true;
+            }
         }
-    }
-    for (int i = 0; i < 2; i++)
-    {
-        float dis_t = hitTriangle(triangle[i], r);
-        if (dis_t > 0 && dis_t < dist)
+        for (int i = 0; i < 2; i++)
         {
-            dist = dis_t;
-            ifHitTriangle = true;
+            float dis_t = hitTriangle(triangle[i], r);
+            if (dis_t > 0 && dis_t < dist)
+            {
+                dist = dis_t;
+                ifHitTriangle = true;
+            }
         }
-    }
-*/
+    */
     // for (int i = 0; i < verticesNum / 3; i++)
-    for (int i = 0; i < 27000 / 3; i++)
+    /*
+    for (int i = 0; i < 21000 / 3; i++)
 
     {
         Triangle tri = getTriangle(i);
@@ -249,6 +347,14 @@ bool hitWorld(Ray r)
             ifHitTriangle = true;
         }
     }
+    */
+
+    if (intersectBVH(r))
+    {
+        r.hitMin = rec.hitMin;
+        return true;
+    }
+
     if (ifHitSphere)
     {
         rec.p = r.origin + dist * r.direction;
@@ -281,7 +387,6 @@ vec3 shading(Ray r)
     {
         if (hitWorld(r))
         {
-            r.origin = rec.p;
 
             if (rec.material == 0)
             {
@@ -292,16 +397,46 @@ vec3 shading(Ray r)
                 r.direction = metal(rec.normal, r.direction);
             }
 
+            r.origin = rec.p;
+            r.hitMin = 3.402823466e+38;
             color *= rec.albedo;
             hitAnything = true;
         }
         else
         {
-            // color *= vec3(1.0, 1.0, 1.0);
+            color *= vec3(1.0, 1.0, 1.0);
             break;
         }
     }
-    if (!hitAnything)
-        color = vec3(0.0, 0.0, 0.0);
+    // if (!hitAnything)
+    //     color = vec3(0.0, 0.0, 0.0);
     return color;
+}
+
+vec3 getAABBb(aabb box, int i)
+{
+    return (i == 0) ? box.minb : box.maxb;
+}
+
+bool intersectAABB(Ray r, aabb box, vec3 invDir, int dirIsNeg[3])
+{
+    float tmin = (getAABBb(box, dirIsNeg[0]).x - r.origin.x) * invDir.x;
+    float tmax = (getAABBb(box, 1 - dirIsNeg[0]).x - r.origin.x) * invDir.x;
+    float tymin = (getAABBb(box, dirIsNeg[1]).y - r.origin.y) * invDir.y;
+    float tymax = (getAABBb(box, 1 - dirIsNeg[1]).y - r.origin.y) * invDir.y;
+    if ((tmin > tymax) || (tymin > tmax))
+        return false;
+    if (tymin > tmin)
+        tmin = tymin;
+    if (tymax < tmax)
+        tmax = tymax;
+    float tzmin = (getAABBb(box, dirIsNeg[2]).z - r.origin.z) * invDir.z;
+    float tzmax = (getAABBb(box, 1 - dirIsNeg[2]).z - r.origin.z) * invDir.z;
+    if ((tmin > tzmax) || (tzmin > tmax))
+        return false;
+    if (tzmin > tmin)
+        tmin = tzmin;
+    if (tzmax < tmax)
+        tmax = tzmax;
+    return tmax > 0.0;
 }

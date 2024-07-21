@@ -9,6 +9,9 @@ impl ScreenFBO {
     pub fn new(gl: &Context, width: i32, height: i32) -> Self {
         let fbo = unsafe { gl.create_framebuffer().unwrap() };
         let texture = unsafe { gl.create_texture().unwrap() };
+        unsafe {
+            assert_eq!(gl.get_error(), NO_ERROR);
+        }
 
         unsafe {
             gl.bind_framebuffer(FRAMEBUFFER, Some(fbo));
@@ -16,6 +19,8 @@ impl ScreenFBO {
             gl.tex_image_2d(
                 TEXTURE_2D, 0, RGB as i32, width, height, 0, RGB, FLOAT, None,
             );
+            assert_eq!(gl.get_error(), NO_ERROR);
+
             gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MIN_FILTER, LINEAR as i32);
             gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MAG_FILTER, LINEAR as i32);
             gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_WRAP_S, CLAMP_TO_EDGE as i32);

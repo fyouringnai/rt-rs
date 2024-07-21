@@ -1,8 +1,9 @@
+use crate::bvh::BVHTree;
 use crate::camera::Camera;
 use crate::model::Model;
+use crate::object::Object;
 use crate::screen::{Screen, ScreenBuffer};
 use crate::shader::Shader;
-use crate::texture::ModelTexture;
 use crate::utils::random_float;
 use crate::App;
 use cgmath::{point3, vec3, EuclideanSpace};
@@ -16,7 +17,8 @@ pub struct Renderer {
     screen: Screen,
     shader: Shader,
     model: Model,
-    model_texture: ModelTexture,
+    bvh_tree: BVHTree,
+    primitives: Vec<Object>,
     screen_buffer: ScreenBuffer,
     frame_time: f32,
     frame_count: i32,
@@ -37,15 +39,19 @@ impl Renderer {
         );
         let screen_buffer = ScreenBuffer::new(&gl, 1600, 1200);
         let model = unsafe { Model::new(&gl, "models/furina_w/furina.obj") };
-        let mut model_texture = ModelTexture::new(&gl);
-        model_texture.set_texture(&gl, &model);
+        let mut bvh_tree = BVHTree::new(&gl);
+        let mut primitives = Vec::new();
+        model.get_primitives(&mut primitives);
+        bvh_tree.build(&primitives);
+        bvh_tree.set_texture(&gl);
         let renderer = Renderer {
             gl,
             camera,
             screen,
             shader,
             model,
-            model_texture,
+            bvh_tree,
+            primitives,
             screen_buffer,
             frame_time: 0.0,
             frame_count: 0,
@@ -81,37 +87,10 @@ impl Renderer {
                     .set_current_buffer(&self.gl, self.camera.render_loop);
 
                 self.shader.use_program(&self.gl);
-                self.model_texture
-                    .use_texture(&self.gl, &self.model, &self.shader);
-                self.shader
-                    .set_int(&self.gl, "screenWidth", size.width as i32);
-                self.shader
-                    .set_int(&self.gl, "screenHeight", size.height as i32);
-                self.shader.set_int(&self.gl, "historyTexture", 0);
-                self.shader
-                    .set_vector3(&self.gl, "camera.camPos", &self.camera.position.to_vec());
-                self.shader
-                    .set_vector3(&self.gl, "camera.front", &self.camera.front);
-                self.shader
-                    .set_vector3(&self.gl, "camera.right", &self.camera.right);
-                self.shader
-                    .set_vector3(&self.gl, "camera.up", &self.camera.up);
-                self.shader
-                    .set_vector3(&self.gl, "camera.leftbottom", &self.camera.left_bottom);
+                self.bvh_tree.use_texture(&self.gl, &self.shader);
+                self.camera.use_camera(&self.gl, &self.shader, &size);
 
-                self.shader.set_float(
-                    &self.gl,
-                    "camera.halfH",
-                    (self.camera.fov / 2.0).to_radians().tan(),
-                );
-                self.shader.set_float(
-                    &self.gl,
-                    "camera.halfW",
-                    (size.width as f32 / size.height as f32)
-                        * (self.camera.fov / 2.0).to_radians().tan(),
-                );
-                self.shader
-                    .set_int(&self.gl, "camera.LoopNum", self.camera.render_loop);
+                self.shader.set_int(&self.gl, "historyTexture", 0);
                 self.shader
                     .set_float(&self.gl, "randOrigin", 674764.0 * (1.0 + random_float()));
                 self.shader

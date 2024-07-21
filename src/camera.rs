@@ -1,5 +1,8 @@
+use crate::shader::Shader;
 use crate::App;
 use cgmath::*;
+use glow::Context;
+use slint::PhysicalSize;
 
 pub struct Camera {
     pub position: Point3<f32>,
@@ -152,6 +155,24 @@ impl Camera {
 
     pub fn update_loop(&mut self) {
         self.render_loop = self.render_loop + 1;
+    }
+
+    pub fn use_camera(&self, gl: &Context, shader: &Shader, size: &PhysicalSize) {
+        shader.set_int(gl, "screenWidth", size.width as i32);
+        shader.set_int(gl, "screenHeight", size.height as i32);
+        shader.set_vector3(gl, "camera.camPos", &self.position.to_vec());
+        shader.set_vector3(gl, "camera.front", &self.front);
+        shader.set_vector3(gl, "camera.right", &self.right);
+        shader.set_vector3(gl, "camera.up", &self.up);
+        shader.set_vector3(gl, "camera.leftbottom", &self.left_bottom);
+
+        shader.set_float(&gl, "camera.halfH", (self.fov / 2.0).to_radians().tan());
+        shader.set_float(
+            gl,
+            "camera.halfW",
+            (size.width as f32 / size.height as f32) * (self.fov / 2.0).to_radians().tan(),
+        );
+        shader.set_int(gl, "camera.LoopNum", self.render_loop);
     }
 
     fn update_camera_vectors(&mut self) {

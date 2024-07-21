@@ -3,7 +3,9 @@ use std::mem::size_of;
 use crate::fbo::ScreenFBO;
 use crate::shader::Shader;
 use bytemuck::cast_slice;
-use glow::{Context, HasContext, VertexArray, ARRAY_BUFFER, FLOAT, STATIC_DRAW, TRIANGLES};
+use glow::{
+    Context, HasContext, VertexArray, ARRAY_BUFFER, FLOAT, NO_ERROR, STATIC_DRAW, TRIANGLES,
+};
 
 pub struct Screen {
     pub shader: Shader,
@@ -18,6 +20,10 @@ impl Screen {
         ];
         let vao = unsafe { gl.create_vertex_array().unwrap() };
         let vbo = unsafe { gl.create_buffer().unwrap() };
+        unsafe {
+            assert_eq!(gl.get_error(), NO_ERROR);
+        }
+
         let shader = Shader::new(gl, "shaders/screen.vert", "shaders/screen.frag");
         unsafe {
             gl.bind_vertex_array(Some(vao));

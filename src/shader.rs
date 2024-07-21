@@ -8,11 +8,7 @@ pub struct Shader {
 }
 
 impl Shader {
-    pub fn new(
-        gl: &Context,
-        vertex_path: &str,
-        fragment_path: &str,
-    ) -> Shader {
+    pub fn new(gl: &Context, vertex_path: &str, fragment_path: &str) -> Shader {
         unsafe {
             let program = gl.create_program().expect("Cannot create program");
 
