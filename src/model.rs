@@ -1,14 +1,13 @@
 use std::path::Path;
 
 use glow::*;
-
 use image::DynamicImage::{ImageLuma8, ImageLumaA8, ImageRgb8, ImageRgba8};
 use tobj::{load_obj, GPU_LOAD_OPTIONS};
 
 use crate::mesh::{Mesh, Texture, Vertex};
 use crate::object::Object;
 use crate::shader::Shader;
-use crate::utils::MATERIAL::DIFFUSE;
+use crate::utils::MATERIAL;
 
 #[derive(Default)]
 pub struct Model {
@@ -24,16 +23,29 @@ impl Model {
         model
     }
 
-    pub unsafe fn draw(&self, gl: &Context, shader: &Shader) {
-        for mesh in &self.mesh {
-            mesh.draw(gl, shader);
-        }
-    }
-
-    pub fn get_primitives(&self, primitives: &mut Vec<Object>) {
+    pub fn get_primitives(&self, primitives: &mut Vec<Object>, material: MATERIAL) {
         let mut vertices = Vec::new();
         let mut vertices_num = 0;
+        let mut texture_index = [-1.0, -1.0, -1.0, -1.0];
         for (_i, mesh) in self.mesh.iter().enumerate() {
+            for (_i, texture) in mesh.textures.iter().enumerate() {
+                let name = &texture.type_;
+                match name.as_str() {
+                    "diffuse_texture" => {
+                        texture_index[0] += 1.0;
+                    }
+                    "specular_texture" => {
+                        texture_index[1] += 1.0;
+                    }
+                    "normal_texture" => {
+                        texture_index[2] += 1.0;
+                    }
+                    "height_texture" => {
+                        texture_index[3] += 1.0;
+                    }
+                    _ => {}
+                };
+            }
             for vertex in &mesh.vertices {
                 let tex_coord = [vertex.tex_coord[0], vertex.tex_coord[1], 0.0];
 
@@ -47,11 +59,52 @@ impl Model {
                         vertex.push(vertices[(vertices_num - (2 - i)) as usize * 3 + 1]);
                         vertex.push(vertices[(vertices_num - (2 - i)) as usize * 3 + 2]);
                     }
-                    let triangle = Object::new_triangle(vertex, DIFFUSE);
+                    let texture_index_temp = [texture_index[0], texture_index[1], texture_index[2]];
+                    vertex.push(texture_index_temp);
+                    vertex.push([texture_index[3], 0.0, 0.0]);
+                    let triangle = Object::new_mesh(vertex, material.clone());
                     primitives.push(triangle);
                 }
                 vertices_num += 1;
             }
+        }
+    }
+
+    pub fn use_textures(&self, gl: &Context, shader: &Shader) {
+        let mut diffuse_nr = -1;
+        let mut specular_nr = -1;
+        let mut normal_nr = -1;
+        let mut height_nr = -1;
+
+        for (i, texture) in self.texture_loaded.iter().enumerate() {
+            unsafe {
+                gl.active_texture(TEXTURE3 + i as u32);
+                gl.bind_texture(TEXTURE_2D, Some(texture.id));
+            }
+            let name = &texture.type_;
+            let number = match name.as_str() {
+                "diffuse_texture" => {
+                    diffuse_nr += 1;
+                    diffuse_nr
+                }
+                "specular_texture" => {
+                    specular_nr += 1;
+                    specular_nr
+                }
+                "normal_texture" => {
+                    normal_nr += 1;
+                    normal_nr
+                }
+                "height_texture" => {
+                    height_nr += 1;
+                    height_nr
+                }
+                _ => {
+                    panic!("unknown texture type");
+                }
+            };
+
+            shader.set_int(gl, &format!("{}{}", name, number), (i + 3) as i32);
         }
     }
 
@@ -105,7 +158,7 @@ impl Model {
                     textures.push(texture);
                 }
             }
-            self.mesh.push(Mesh::new(gl, vertices, textures, indices))
+            self.mesh.push(Mesh::new(vertices, textures, indices))
         }
     }
 

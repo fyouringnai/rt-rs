@@ -1,15 +1,17 @@
+use std::time::Instant;
+
+use cgmath::point3;
+use glow::{Context, HasContext, COLOR_BUFFER_BIT, FRAMEBUFFER};
+use slint::ComponentHandle;
+
 use crate::bvh::BVHTree;
 use crate::camera::Camera;
 use crate::model::Model;
 use crate::object::Object;
 use crate::screen::{Screen, ScreenBuffer};
 use crate::shader::Shader;
-use crate::utils::random_float;
+use crate::utils::MATERIAL::*;
 use crate::App;
-use cgmath::{point3, vec3, EuclideanSpace};
-use glow::{Context, HasContext, COLOR_BUFFER_BIT, FRAMEBUFFER};
-use slint::ComponentHandle;
-use std::time::Instant;
 
 pub struct Renderer {
     gl: Context,
@@ -41,7 +43,19 @@ impl Renderer {
         let model = unsafe { Model::new(&gl, "models/furina_w/furina.obj") };
         let mut bvh_tree = BVHTree::new(&gl);
         let mut primitives = Vec::new();
-        model.get_primitives(&mut primitives);
+        let sphere = Object::new_sphere([-2.0, 1.0, 0.0], 0.3, [0.8, 0.8, 0.8], METAL);
+        let floor_vert = vec![
+            [-10.0, 0.0, -10.0],
+            [-10.0, 0.0, 10.0],
+            [10.0, 0.0, 10.0],
+            [10.0, 0.0, -10.0],
+            [0.0, 1.0, 0.0],
+        ];
+        let floor = Object::new_rectangle(floor_vert, [0.8, 0.8, 0.8], METAL);
+
+        primitives.push(sphere);
+        primitives.push(floor);
+        model.get_primitives(&mut primitives, DIFFUSE);
         bvh_tree.build(&primitives);
         bvh_tree.set_texture(&gl);
         let renderer = Renderer {
@@ -88,82 +102,11 @@ impl Renderer {
 
                 self.shader.use_program(&self.gl);
                 self.bvh_tree.use_texture(&self.gl, &self.shader);
+                self.model.use_textures(&self.gl, &self.shader);
                 self.camera.use_camera(&self.gl, &self.shader, &size);
 
-                self.shader.set_int(&self.gl, "historyTexture", 0);
-                self.shader
-                    .set_float(&self.gl, "randOrigin", 674764.0 * (1.0 + random_float()));
                 self.shader
                     .set_int(&self.gl, "depths", app.get_depths() as i32);
-
-                self.shader.set_vector3(
-                    &self.gl,
-                    "sphere[0].center",
-                    &point3(0.0, 0.0, -1.0).to_vec(),
-                );
-                self.shader.set_float(&self.gl, "sphere[0].radius", 0.5);
-                self.shader.set_int(&self.gl, "sphere[0].material", 0);
-                self.shader
-                    .set_vector3(&self.gl, "sphere[0].albedo", &vec3(0.8, 0.7, 0.2));
-                self.shader.set_vector3(
-                    &self.gl,
-                    "sphere[1].center",
-                    &point3(1.0, 0.0, -1.0).to_vec(),
-                );
-                self.shader.set_float(&self.gl, "sphere[1].radius", 0.5);
-                self.shader.set_int(&self.gl, "sphere[1].material", 1);
-                self.shader
-                    .set_vector3(&self.gl, "sphere[1].albedo", &vec3(0.2, 0.7, 0.6));
-                self.shader.set_vector3(
-                    &self.gl,
-                    "sphere[2].center",
-                    &point3(-1.0, 0.0, -1.0).to_vec(),
-                );
-                self.shader.set_float(&self.gl, "sphere[2].radius", 0.5);
-                self.shader.set_int(&self.gl, "sphere[2].material", 1);
-                self.shader
-                    .set_vector3(&self.gl, "sphere[2].albedo", &vec3(0.1, 0.3, 0.7));
-                self.shader.set_vector3(
-                    &self.gl,
-                    "sphere[3].center",
-                    &point3(0.0, 0.0, 0.0).to_vec(),
-                );
-                self.shader.set_float(&self.gl, "sphere[3].radius", 0.5);
-                self.shader.set_int(&self.gl, "sphere[3].material", 0);
-                self.shader
-                    .set_vector3(&self.gl, "sphere[3].albedo", &vec3(0.9, 0.9, 0.9));
-
-                self.shader.set_vector3(
-                    &self.gl,
-                    "triangle[0].v[0]",
-                    &point3(2.0, -0.5, 2.0).to_vec(),
-                );
-                self.shader.set_vector3(
-                    &self.gl,
-                    "triangle[0].v[1]",
-                    &point3(-2.0, -0.5, -2.0).to_vec(),
-                );
-                self.shader.set_vector3(
-                    &self.gl,
-                    "triangle[0].v[2]",
-                    &point3(-2.0, -0.5, 2.0).to_vec(),
-                );
-
-                self.shader.set_vector3(
-                    &self.gl,
-                    "triangle[1].v[0]",
-                    &point3(2.0, -0.5, 2.0).to_vec(),
-                );
-                self.shader.set_vector3(
-                    &self.gl,
-                    "triangle[1].v[1]",
-                    &point3(2.0, -0.5, -2.0).to_vec(),
-                );
-                self.shader.set_vector3(
-                    &self.gl,
-                    "triangle[1].v[2]",
-                    &point3(-2.0, -0.5, -2.0).to_vec(),
-                );
 
                 self.screen.draw_shader(&self.gl, &self.shader);
 

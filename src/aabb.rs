@@ -1,5 +1,5 @@
 use crate::utils::MATERIAL::NONE;
-use crate::utils::SHAPE::{RT_SPHERE, RT_TRIANGLE};
+use crate::utils::SHAPE::{RT_MESH, RT_RECTANGLE, RT_SPHERE};
 use crate::utils::{MATERIAL, MAX_FLOAT, MIN_FLOAT, SHAPE};
 
 #[derive(Clone)]
@@ -22,11 +22,11 @@ impl AABB {
         aabb
     }
 
-    pub fn new_triangle(vertices: Vec<[f32; 3]>, material: MATERIAL) -> AABB {
+    pub fn new_mesh(vertices: Vec<[f32; 3]>, material: MATERIAL) -> AABB {
         let mut aabb = AABB {
             min: [MAX_FLOAT, MAX_FLOAT, MAX_FLOAT],
             max: [MIN_FLOAT, MIN_FLOAT, MIN_FLOAT],
-            shape: RT_TRIANGLE,
+            shape: RT_MESH,
             material,
         };
 
@@ -51,6 +51,50 @@ impl AABB {
             shape: RT_SPHERE,
             material,
         };
+
+        aabb
+    }
+
+    pub fn new_triangle(vertices: Vec<[f32; 3]>, material: MATERIAL) -> AABB {
+        let mut aabb = AABB {
+            min: [MAX_FLOAT, MAX_FLOAT, MAX_FLOAT],
+            max: [MIN_FLOAT, MIN_FLOAT, MIN_FLOAT],
+            shape: SHAPE::RT_TRIANGLE,
+            material,
+        };
+
+        for vertex in vertices {
+            for i in 0..3 {
+                if vertex[i] < aabb.min[i] {
+                    aabb.min[i] = vertex[i];
+                }
+                if vertex[i] > aabb.max[i] {
+                    aabb.max[i] = vertex[i];
+                }
+            }
+        }
+
+        aabb
+    }
+
+    pub fn new_rectangle(vertices: Vec<[f32; 3]>, material: MATERIAL) -> AABB {
+        let mut aabb = AABB {
+            min: [MAX_FLOAT, MAX_FLOAT, MAX_FLOAT],
+            max: [MIN_FLOAT, MIN_FLOAT, MIN_FLOAT],
+            shape: RT_RECTANGLE,
+            material,
+        };
+
+        for vertex in vertices {
+            for i in 0..3 {
+                if vertex[i] < aabb.min[i] {
+                    aabb.min[i] = vertex[i];
+                }
+                if vertex[i] > aabb.max[i] {
+                    aabb.max[i] = vertex[i];
+                }
+            }
+        }
 
         aabb
     }

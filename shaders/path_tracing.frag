@@ -28,21 +28,32 @@ struct Ray
 
 struct Sphere
 {
-    int material;
     vec3 albedo;
     vec3 center;
     float radius;
 };
-uniform Sphere sphere[4];
+
+struct Mesh
+{
+    vec3 v[3];
+    vec3 n[3];
+    vec2 uv[3];
+    vec4 texID;
+};
 
 struct Triangle
 {
     vec3 v[3];
-    vec3 n[3];
-    vec3 uv[3];
+    vec3 n;
+    vec3 albedo;
 };
 
-uniform Triangle triangle[2];
+struct Rect
+{
+    vec3 v[4];
+    vec3 n;
+    vec3 albedo;
+};
 
 struct hitRecord
 {
@@ -65,6 +76,8 @@ struct LinearBVHNode
     float primitives_num;
     float axis;
     float child_offset;
+    float shape;
+    float material;
 };
 
 uint wseed;
@@ -100,7 +113,6 @@ void main()
     vec3 historyColor = texture(historyTexture, TexCoords).rgb;
 
     vec2 offset = vec2((rand() - 0.5) / float(screenWidth), (rand() - 0.5) / float(screenHeight));
-    // vec2 offset = vec2(0.0, 0.0);
 
     Ray ray;
     ray.origin = camera.camPos;
@@ -111,7 +123,6 @@ void main()
     vec3 color = shading(ray);
     color = mix(historyColor, color, 1.0 / float(camera.LoopNum));
 
-    // FragColor = vec4((getData(bvh_texture, index)), 1.0);
     FragColor = vec4(color, 1.0);
 }
 
@@ -153,26 +164,64 @@ vec3 getData(sampler2D dataTexture, float index)
     return texture(dataTexture, texCoord).rgb;
 }
 
+Sphere getSphere(int index)
+{
+    Sphere sphere;
+    sphere.center = getData(vertices_texture, float(index * 11));
+    sphere.albedo = getData(vertices_texture, float(index * 11 + 1));
+    sphere.radius = getData(vertices_texture, float(index * 11 + 2)).x;
+
+    return sphere;
+}
+
+Mesh getMesh(int index)
+{
+    Mesh mesh;
+    for (int i = 0; i < 3; i++)
+    {
+        mesh.v[i] = getData(vertices_texture, float(index * 11 + i * 3));
+        mesh.n[i] = getData(vertices_texture, float(index * 11 + i * 3 + 1));
+        mesh.uv[i] = getData(vertices_texture, float(index * 11 + i * 3 + 2)).xy;
+    }
+    mesh.texID =
+        vec4(getData(vertices_texture, float(index * 11 + 9)), getData(vertices_texture, float(index * 11 + 10)).x);
+    return mesh;
+}
+
 Triangle getTriangle(int index)
 {
     Triangle tri;
     for (int i = 0; i < 3; i++)
     {
-        tri.v[i] = getData(vertices_texture, float(index * 9 + i * 3));
-        tri.n[i] = getData(vertices_texture, float(index * 9 + i * 3 + 3));
-        tri.uv[i] = getData(vertices_texture, float(index * 9 + i * 3 + 6));
+        tri.v[i] = getData(vertices_texture, float(index * 11 + i));
     }
+    tri.n = getData(vertices_texture, float(index * 11 + 3));
+    tri.albedo = getData(vertices_texture, float(index * 11 + 4));
     return tri;
+}
+
+Rect getRect(int index)
+{
+    Rect rect;
+    for (int i = 0; i < 4; i++)
+    {
+        rect.v[i] = getData(vertices_texture, float(index * 11 + i));
+    }
+    rect.n = getData(vertices_texture, float(index * 11 + 4));
+    rect.albedo = getData(vertices_texture, float(index * 11 + 5));
+    return rect;
 }
 
 LinearBVHNode getBVHNode(int index)
 {
     LinearBVHNode node;
-    node.minb = getData(bvh_texture, float(index * 3));
-    node.maxb = getData(bvh_texture, float(index * 3 + 1));
-    node.child_offset = getData(bvh_texture, float(index * 3 + 2)).x;
-    node.primitives_num = getData(bvh_texture, float(index * 3 + 2)).y;
-    node.axis = getData(bvh_texture, float(index * 3 + 2)).z;
+    node.minb = getData(bvh_texture, float(index * 4));
+    node.maxb = getData(bvh_texture, float(index * 4 + 1));
+    node.child_offset = getData(bvh_texture, float(index * 4 + 2)).x;
+    node.primitives_num = getData(bvh_texture, float(index * 4 + 2)).y;
+    node.axis = getData(bvh_texture, float(index * 4 + 2)).z;
+    node.shape = getData(bvh_texture, float(index * 4 + 3)).x;
+    node.material = getData(bvh_texture, float(index * 4 + 3)).y;
     return node;
 }
 
@@ -184,6 +233,23 @@ vec3 diffuse(vec3 normal)
 vec3 metal(vec3 normal, vec3 direction)
 {
     return reflect(direction, normal);
+}
+
+vec3 centroidCoordinates(vec3 v0, vec3 v1, vec3 v2, vec3 p)
+{
+    vec3 v0v1 = v1 - v0;
+    vec3 v0v2 = v2 - v0;
+    vec3 v0p = p - v0;
+    float d00 = dot(v0v1, v0v1);
+    float d01 = dot(v0v1, v0v2);
+    float d11 = dot(v0v2, v0v2);
+    float d20 = dot(v0p, v0v1);
+    float d21 = dot(v0p, v0v2);
+    float denom = d00 * d11 - d01 * d01;
+    float v = (d11 * d20 - d01 * d21) / denom;
+    float w = (d00 * d21 - d01 * d20) / denom;
+    float u = 1.0 - v - w;
+    return vec3(u, v, w);
 }
 
 float hitSphere(Sphere sphere, Ray r)
@@ -211,16 +277,16 @@ float hitSphere(Sphere sphere, Ray r)
     }
 }
 
-float hitTriangle(Triangle triangle, Ray r)
+float hitMesh(Mesh mesh, Ray r)
 {
-    vec3 e1 = triangle.v[1] - triangle.v[0];
-    vec3 e2 = triangle.v[2] - triangle.v[0];
+    vec3 e1 = mesh.v[1] - mesh.v[0];
+    vec3 e2 = mesh.v[2] - mesh.v[0];
     vec3 n = normalize(cross(e1, e2));
-    if (dot(n, r.direction) == 0.0)
+    if (dot(n, r.direction) >= 0.0)
     {
         return -1.0;
     }
-    vec3 s = (r.origin - triangle.v[0]);
+    vec3 s = (r.origin - mesh.v[0]);
     vec3 s1 = (cross(r.direction, e2));
     vec3 s2 = (cross(s, e1));
     float t = dot(s2, e2) / dot(s1, e1);
@@ -236,17 +302,80 @@ float hitTriangle(Triangle triangle, Ray r)
     }
 }
 
+float hitTriangle(Triangle tri, Ray r)
+{
+
+    vec3 n = normalize(tri.n);
+    if (dot(n, r.direction) >= 0.0)
+    {
+        return -1.0;
+    }
+    vec3 e1 = tri.v[1] - tri.v[0];
+    vec3 e2 = tri.v[2] - tri.v[0];
+    vec3 s = (r.origin - tri.v[0]);
+    vec3 s1 = (cross(r.direction, e2));
+    vec3 s2 = (cross(s, e1));
+    float t = dot(s2, e2) / dot(s1, e1);
+    float u = dot(s1, s) / dot(s1, e1);
+    float v = dot(s2, r.direction) / dot(s1, e1);
+    if (u >= 0.0 && v >= 0.0 && u + v <= 1.0 && t > 0.00001)
+    {
+        return t;
+    }
+    else
+    {
+        return -1.0;
+    }
+}
+
+float hitRect(Rect rect, Ray r)
+{
+    vec3 n = normalize(rect.n);
+    if (dot(n, r.direction) >= 0.0)
+    {
+        return -1.0;
+    }
+    Triangle tri1;
+    Triangle tri2;
+    tri1.v[0] = rect.v[0];
+    tri1.v[1] = rect.v[1];
+    tri1.v[2] = rect.v[2];
+    tri1.n = rect.n;
+    tri2.v[0] = rect.v[0];
+    tri2.v[1] = rect.v[2];
+    tri2.v[2] = rect.v[3];
+    tri2.n = rect.n;
+    float t1 = hitTriangle(tri1, r);
+    float t2 = hitTriangle(tri2, r);
+    if (t1 > 0.0)
+    {
+        return t1;
+    }
+    else if (t2 > 0.0)
+    {
+        return t2;
+    }
+    else
+    {
+        return -1.0;
+    }
+}
+
 bool intersectBVH(Ray r)
 {
     vec3 invDir = 1.0 / r.direction;
     bool hit = false;
+    int hitShape = 0;
     int dirIsNeg[3];
     dirIsNeg[0] = invDir.x < 0.0 ? 1 : 0;
     dirIsNeg[1] = invDir.y < 0.0 ? 1 : 0;
     dirIsNeg[2] = invDir.z < 0.0 ? 1 : 0;
     int toVisitOffset = 0, currentNodeIndex = 0;
     int nodesToVisit[64];
+    Mesh mesh;
+    Sphere sphere;
     Triangle tri;
+    Rect rect;
     while (true)
     {
         LinearBVHNode node = getBVHNode(currentNodeIndex);
@@ -259,13 +388,105 @@ bool intersectBVH(Ray r)
             {
                 for (int i = 0; i < node.primitives_num; i++)
                 {
-                    Triangle tri_t = getTriangle(int(node.child_offset + i));
-                    float dis_t = hitTriangle(tri_t, r);
-                    if (dis_t > 0.0 && dis_t < r.hitMin)
+                    float dis_t;
+                    switch (int(node.shape))
                     {
-                        r.hitMin = dis_t;
-                        hit = true;
-                        tri = tri_t;
+                    case 0:
+                        break;
+                    case 1:
+                        Sphere sphere_t = getSphere(int(node.child_offset + i));
+                        dis_t = hitSphere(sphere_t, r);
+                        if (dis_t > 0.0 && dis_t < r.hitMin)
+                        {
+                            r.hitMin = dis_t;
+                            hit = true;
+                            sphere = sphere_t;
+                            hitShape = 1;
+                            switch (int(node.material))
+                            {
+                            case 1:
+                                rec.material = 1;
+                                break;
+                            case 2:
+                                rec.material = 2;
+                                break;
+                            default:
+                                rec.material = 0;
+                                break;
+                            }
+                        }
+                        break;
+                    case 2:
+                        Mesh mesh_t = getMesh(int(node.child_offset + i));
+                        dis_t = hitMesh(mesh_t, r);
+                        if (dis_t > 0.0 && dis_t < r.hitMin)
+                        {
+                            r.hitMin = dis_t;
+                            hit = true;
+                            mesh = mesh_t;
+                            hitShape = 2;
+                            switch (int(node.material))
+                            {
+                            case 1:
+                                rec.material = 1;
+                                break;
+                            case 2:
+                                rec.material = 2;
+                                break;
+                            default:
+                                rec.material = 0;
+                                break;
+                            }
+                        }
+                        break;
+                    case 3:
+                        Triangle tri_t = getTriangle(int(node.child_offset + i));
+                        dis_t = hitTriangle(tri_t, r);
+                        if (dis_t > 0.0 && dis_t < r.hitMin)
+                        {
+                            r.hitMin = dis_t;
+                            hit = true;
+                            tri = tri_t;
+                            hitShape = 3;
+                            switch (int(node.material))
+                            {
+                            case 1:
+                                rec.material = 1;
+                                break;
+                            case 2:
+                                rec.material = 2;
+                                break;
+                            default:
+                                rec.material = 0;
+                                break;
+                            }
+                        }
+                        break;
+                    case 4:
+                        Rect rect_t = getRect(int(node.child_offset + i));
+                        dis_t = hitRect(rect_t, r);
+                        if (dis_t > 0.0 && dis_t < r.hitMin)
+                        {
+                            r.hitMin = dis_t;
+                            hit = true;
+                            rect = rect_t;
+                            hitShape = 4;
+                            switch (int(node.material))
+                            {
+                            case 1:
+                                rec.material = 1;
+                                break;
+                            case 2:
+                                rec.material = 2;
+                                break;
+                            default:
+                                rec.material = 0;
+                                break;
+                            }
+                        }
+                        break;
+                    default:
+                        break;
                     }
                 }
                 if (toVisitOffset == 0)
@@ -295,88 +516,75 @@ bool intersectBVH(Ray r)
     }
     if (hit)
     {
-        rec.p = r.origin + r.hitMin * r.direction;
-        rec.normal = normalize(cross(tri.v[1] - tri.v[0], tri.v[2] - tri.v[0]));
-        rec.material = 0;
-        rec.albedo = vec3(0.5, 0.5, 1.0);
-        rec.hitMin = r.hitMin;
-        setNormal(r);
+        switch (hitShape)
+        {
+        case 1:
+            rec.p = r.origin + r.hitMin * r.direction;
+            rec.normal = normalize(rec.p - sphere.center);
+            rec.albedo = sphere.albedo;
+            rec.hitMin = r.hitMin;
+            setNormal(r);
+            break;
+        case 2:
+            rec.p = r.origin + r.hitMin * r.direction;
+            vec3 centroidC = centroidCoordinates(mesh.v[0], mesh.v[1], mesh.v[2], rec.p);
+            rec.normal = normalize(centroidC.x * mesh.n[0] + centroidC.y * mesh.n[1] + centroidC.z * mesh.n[2]);
+            vec2 uv = centroidC.x * mesh.uv[0] + centroidC.y * mesh.uv[1] + centroidC.z * mesh.uv[2];
+            switch (int(mesh.texID.x))
+            {
+            case 0:
+                rec.albedo = texture(diffuse_texture0, uv).rgb;
+                break;
+            case 1:
+                rec.albedo = texture(diffuse_texture1, uv).rgb;
+                break;
+            case 2:
+                rec.albedo = texture(diffuse_texture2, uv).rgb;
+                break;
+            case 3:
+                rec.albedo = texture(diffuse_texture3, uv).rgb;
+                break;
+            case 4:
+                rec.albedo = texture(diffuse_texture4, uv).rgb;
+                break;
+            default:
+                rec.albedo = vec3(0.5, 0.5, 1.0);
+                break;
+            }
+            // rec.albedo = vec3(0.5, 0.5, 1.0);
+            rec.hitMin = r.hitMin;
+            setNormal(r);
+            break;
+        case 3:
+            rec.p = r.origin + r.hitMin * r.direction;
+            rec.normal = normalize(tri.n);
+            rec.albedo = tri.albedo;
+            rec.hitMin = r.hitMin;
+            setNormal(r);
+            break;
+        case 4:
+            rec.p = r.origin + r.hitMin * r.direction;
+            rec.normal = normalize(rect.n);
+            rec.albedo = rect.albedo;
+            rec.hitMin = r.hitMin;
+            setNormal(r);
+            break;
+        default:
+            break;
+        }
     }
     return hit;
 }
 
 bool hitWorld(Ray r)
 {
-    float dist = 3.402823466e+38;
-    bool ifHitSphere = false;
-    bool ifHitTriangle = false;
-    int hitSphereIndex;
-    int hitTriangleIndex;
-    /*
-        for (int i = 0; i < 4; i++)
-        {
-            float dis_t = hitSphere(sphere[i], r);
-            if (dis_t > 0 && dis_t < dist)
-            {
-                dist = dis_t;
-                hitSphereIndex = i;
-                ifHitSphere = true;
-            }
-        }
-        for (int i = 0; i < 2; i++)
-        {
-            float dis_t = hitTriangle(triangle[i], r);
-            if (dis_t > 0 && dis_t < dist)
-            {
-                dist = dis_t;
-                ifHitTriangle = true;
-            }
-        }
-    */
-    // for (int i = 0; i < verticesNum / 3; i++)
-    /*
-    for (int i = 0; i < 21000 / 3; i++)
-
-    {
-        Triangle tri = getTriangle(i);
-        float dis_t = hitTriangle(tri, r);
-        if (dis_t > 0 && dis_t < dist)
-        {
-            dist = dis_t;
-            hitTriangleIndex = i;
-            ifHitTriangle = true;
-        }
-    }
-    */
-
     if (intersectBVH(r))
     {
         r.hitMin = rec.hitMin;
         return true;
     }
 
-    if (ifHitSphere)
-    {
-        rec.p = r.origin + dist * r.direction;
-        rec.normal = normalize(r.origin + dist * r.direction - sphere[hitSphereIndex].center);
-        rec.material = sphere[hitSphereIndex].material;
-        rec.albedo = sphere[hitSphereIndex].albedo;
-        setNormal(r);
-        return true;
-    }
-    else if (ifHitTriangle)
-    {
-        rec.p = r.origin + dist * r.direction;
-        // rec.normal = normalize(cross(triangle[0].v[1] - triangle[0].v[0], triangle[0].v[2] - triangle[0].v[0]));
-        rec.normal = normalize(cross(getTriangle(hitTriangleIndex).v[1] - getTriangle(hitTriangleIndex).v[0],
-                                     getTriangle(hitTriangleIndex).v[2] - getTriangle(hitTriangleIndex).v[0]));
-        rec.material = 0;
-        rec.albedo = vec3(0.5, 0.5, 1.0);
-        setNormal(r);
-        return true;
-    }
-    else
-        return false;
+    return false;
 }
 
 vec3 shading(Ray r)
@@ -388,11 +596,11 @@ vec3 shading(Ray r)
         if (hitWorld(r))
         {
 
-            if (rec.material == 0)
+            if (rec.material == 1)
             {
                 r.direction = diffuse(rec.normal);
             }
-            else if (rec.material == 1)
+            else if (rec.material == 2)
             {
                 r.direction = metal(rec.normal, r.direction);
             }
@@ -408,8 +616,8 @@ vec3 shading(Ray r)
             break;
         }
     }
-    // if (!hitAnything)
-    //     color = vec3(0.0, 0.0, 0.0);
+    if (!hitAnything)
+        color = vec3(0.0, 0.0, 0.0);
     return color;
 }
 

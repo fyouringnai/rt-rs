@@ -5,7 +5,9 @@ use rand::Rng;
 pub enum SHAPE {
     NONE = 0,
     RT_SPHERE = 1,
-    RT_TRIANGLE = 2,
+    RT_MESH = 2,
+    RT_TRIANGLE = 3,
+    RT_RECTANGLE = 4,
 }
 
 #[derive(Clone)]

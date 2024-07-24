@@ -101,8 +101,6 @@ pub struct BVHTree {
     linear_bvh_node: Vec<LinearBVHNode>,
     bvh_texture: Texture,
     vertices_texture: Texture,
-    total_nodes: i32,
-    total_vertices: i32,
 }
 
 impl BVHTree {
@@ -112,8 +110,6 @@ impl BVHTree {
             linear_bvh_node: Vec::new(),
             bvh_texture: unsafe { gl.create_texture().unwrap() },
             vertices_texture: unsafe { gl.create_texture().unwrap() },
-            total_nodes: 0,
-            total_vertices: 0,
         };
         bvh_tree
     }
@@ -132,12 +128,26 @@ impl BVHTree {
                         primitive.material.clone(),
                     );
                 }
-                SHAPE::RT_TRIANGLE => {
+                SHAPE::RT_MESH => {
                     let mut vertex = Vec::new();
                     for i in 0..3 {
                         vertex.push(primitive.vertices[i * 3]);
                     }
+                    aabb = AABB::new_mesh(vertex, primitive.material.clone());
+                }
+                SHAPE::RT_TRIANGLE => {
+                    let mut vertex = Vec::new();
+                    for i in 0..3 {
+                        vertex.push(primitive.vertices[i]);
+                    }
                     aabb = AABB::new_triangle(vertex, primitive.material.clone());
+                }
+                SHAPE::RT_RECTANGLE => {
+                    let mut vertex = Vec::new();
+                    for i in 0..4 {
+                        vertex.push(primitive.vertices[i]);
+                    }
+                    aabb = AABB::new_rectangle(vertex, primitive.material.clone());
                 }
             }
 
@@ -154,7 +164,6 @@ impl BVHTree {
             &mut ordered_prims,
         );
         self.primitives = ordered_prims;
-        self.total_nodes = total_nodes;
 
         let mut offset = 0;
         self.flatten_bvh(&root, &mut offset);
@@ -172,23 +181,61 @@ impl BVHTree {
             node_data.push(node.offset as f32);
             node_data.push(node.n_primitives as f32);
             node_data.push(node.axis as f32);
+            node_data.push(node.aabb.shape.clone() as u32 as f32);
+            node_data.push(node.aabb.material.clone() as u32 as f32);
+            node_data.push(0.0);
         }
         let mut vertex_data = Vec::new();
         for primitive in &self.primitives {
             match primitive.shape {
                 SHAPE::NONE => {}
-                SHAPE::RT_SPHERE => {}
+                SHAPE::RT_SPHERE => {
+                    for i in 0..3 {
+                        vertex_data.push(primitive.center[i]);
+                    }
+                    for i in 0..3 {
+                        vertex_data.push(primitive.albedo[i]);
+                    }
+                    vertex_data.push(primitive.radius);
+                    for _i in 0..26 {
+                        vertex_data.push(0.0);
+                    }
+                }
+                SHAPE::RT_MESH => {
+                    for vertex in &primitive.vertices {
+                        vertex_data.push(vertex[0]);
+                        vertex_data.push(vertex[1]);
+                        vertex_data.push(vertex[2]);
+                    }
+                }
                 SHAPE::RT_TRIANGLE => {
                     for vertex in &primitive.vertices {
                         vertex_data.push(vertex[0]);
                         vertex_data.push(vertex[1]);
                         vertex_data.push(vertex[2]);
-                        self.total_vertices += 1;
+                    }
+                    for i in 0..3 {
+                        vertex_data.push(primitive.albedo[i]);
+                    }
+                    for _i in 0..18 {
+                        vertex_data.push(0.0);
+                    }
+                }
+                SHAPE::RT_RECTANGLE => {
+                    for vertex in &primitive.vertices {
+                        vertex_data.push(vertex[0]);
+                        vertex_data.push(vertex[1]);
+                        vertex_data.push(vertex[2]);
+                    }
+                    for i in 0..3 {
+                        vertex_data.push(primitive.albedo[i]);
+                    }
+                    for _i in 0..15 {
+                        vertex_data.push(0.0);
                     }
                 }
             }
         }
-        self.total_vertices = self.total_vertices / 3;
         unsafe {
             gl.bind_texture(TEXTURE_2D, Some(self.bvh_texture));
             gl.tex_image_2d(
@@ -231,8 +278,6 @@ impl BVHTree {
     pub fn use_texture(&self, gl: &Context, shader: &Shader) {
         unsafe {
             shader.use_program(gl);
-            shader.set_int(gl, "nodeNum", self.total_nodes);
-            shader.set_int(&gl, "verticesNum", self.total_vertices);
             gl.active_texture(TEXTURE1);
             gl.bind_texture(TEXTURE_2D, Some(self.vertices_texture));
             shader.set_int(&gl, "vertices_texture", 1);
@@ -241,6 +286,18 @@ impl BVHTree {
             gl.bind_texture(TEXTURE_2D, Some(self.bvh_texture));
             assert_eq!(gl.get_error(), NO_ERROR);
         }
+    }
+
+    pub fn delete_texture(&self, gl: &Context) {
+        unsafe {
+            gl.delete_texture(self.bvh_texture);
+            gl.delete_texture(self.vertices_texture);
+        }
+    }
+
+    pub fn create_texture(&mut self, gl: &Context) {
+        self.bvh_texture = unsafe { gl.create_texture().unwrap() };
+        self.vertices_texture = unsafe { gl.create_texture().unwrap() };
     }
 
     fn recursive_build(
@@ -260,6 +317,7 @@ impl BVHTree {
         let primitives_number = end - start;
         if primitives_number == 1 {
             let first_offset = ordered_primitives.len() as i32;
+            #[allow(unused_assignments)]
             let mut primitive_number = 0;
             for i in start..end {
                 primitive_number = primitive_info[i as usize].primitive_number;

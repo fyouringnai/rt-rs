@@ -1,4 +1,5 @@
 use crate::shader::Shader;
+use crate::utils::random_float;
 use crate::App;
 use cgmath::*;
 use glow::Context;
@@ -173,6 +174,8 @@ impl Camera {
             (size.width as f32 / size.height as f32) * (self.fov / 2.0).to_radians().tan(),
         );
         shader.set_int(gl, "camera.LoopNum", self.render_loop);
+        shader.set_int(gl, "historyTexture", 0);
+        shader.set_float(gl, "randOrigin", 674764.0 * (1.0 + random_float()));
     }
 
     fn update_camera_vectors(&mut self) {
