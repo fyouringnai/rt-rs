@@ -228,7 +228,12 @@ LinearBVHNode getBVHNode(int index)
 
 vec3 diffuse(vec3 normal)
 {
-    return normalize(normal + random_in_unit_sphere());
+    vec3 out_dir = rec.normal + random_in_unit_sphere();
+    if (abs(out_dir.x) < 1E-8 || abs(out_dir.y) < 1E-8 || abs(out_dir.z) < 1E-8)
+    {
+        out_dir = rec.normal;
+    }
+    return normalize(out_dir);
 }
 
 vec3 metal(vec3 normal, vec3 direction)
@@ -535,7 +540,6 @@ bool intersectBVH(Ray r)
                 rec.albedo = vec3(0.5, 0.5, 1.0);
                 break;
             }
-            // rec.albedo = vec3(0.5, 0.5, 1.0);
             rec.hitMin = r.hitMin;
             setNormal(r);
             break;
@@ -576,6 +580,7 @@ vec3 shading(Ray r)
     vec3 color = vec3(0.0, 0.0, 0.0);
     vec3 attenuation = vec3(1.0, 1.0, 1.0);
     vec3 direction = vec3(0.0, 0.0, 0.0);
+    bool hit = false;
     bool light = false;
     for (int i = 0; i < depths; i++)
     {
@@ -585,24 +590,12 @@ vec3 shading(Ray r)
             {
             case 1:
                 direction = diffuse(rec.normal);
-                if (direction == vec3(0.0, 0.0, 0.0))
-                {
-                    rec.light = rec.albedo;
-                    light = true;
-                    break;
-                }
                 rec.light = vec3(0.0, 0.0, 0.0);
                 r.direction = direction;
                 break;
 
             case 2:
                 direction = metal(rec.normal, r.direction);
-                if (direction == vec3(0.0, 0.0, 0.0))
-                {
-                    rec.light = rec.albedo;
-                    light = true;
-                    break;
-                }
                 rec.light = vec3(0.0, 0.0, 0.0);
                 r.direction = direction;
                 break;
@@ -623,7 +616,8 @@ vec3 shading(Ray r)
 
             r.origin = rec.p;
             r.hitMin = 3.402823466e+38;
-            color = rec.light;
+            hit = true;
+            color += rec.light;
             if (!light)
                 attenuation *= rec.albedo;
             color *= attenuation;
@@ -632,6 +626,10 @@ vec3 shading(Ray r)
         {
             break;
         }
+    }
+    if (!hit)
+    {
+        color *= vec3(0.0, 0.0, 0.0);
     }
     return color;
 }

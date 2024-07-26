@@ -1,13 +1,13 @@
-use std::path::Path;
-
+use cgmath::Vector3;
 use glow::*;
 use image::DynamicImage::{ImageLuma8, ImageLumaA8, ImageRgb8, ImageRgba8};
+use std::path::Path;
 use tobj::{load_obj, GPU_LOAD_OPTIONS};
 
 use crate::mesh::{Mesh, Texture, Vertex};
 use crate::object::Object;
 use crate::shader::Shader;
-use crate::utils::MATERIAL;
+use crate::utils::{trans, translated, translated_normal, MATERIAL};
 
 #[derive(Default)]
 pub struct Model {
@@ -23,10 +23,16 @@ impl Model {
         model
     }
 
-    pub fn get_primitives(&self, primitives: &mut Vec<Object>, material: MATERIAL) {
+    pub fn get_primitives(
+        &self,
+        primitives: &mut Vec<Object>,
+        transform: &Vec<Vector3<f32>>,
+        material: MATERIAL,
+    ) {
         let mut vertices = Vec::new();
         let mut vertices_num = 0;
         let mut texture_index = [-1.0, -1.0, -1.0, -1.0];
+        let model = trans(transform[0], transform[1], transform[2]);
         for (_i, mesh) in self.mesh.iter().enumerate() {
             for (_i, texture) in mesh.textures.iter().enumerate() {
                 let name = &texture.type_;
@@ -55,8 +61,14 @@ impl Model {
                 if vertices_num % 3 == 2 {
                     let mut vertex = Vec::new();
                     for i in 0..3 {
-                        vertex.push(vertices[(vertices_num - (2 - i)) as usize * 3]);
-                        vertex.push(vertices[(vertices_num - (2 - i)) as usize * 3 + 1]);
+                        vertex.push(translated(
+                            &vertices[(vertices_num - (2 - i)) as usize * 3],
+                            &model,
+                        ));
+                        vertex.push(translated_normal(
+                            &vertices[(vertices_num - (2 - i)) as usize * 3 + 1],
+                            &model,
+                        ));
                         vertex.push(vertices[(vertices_num - (2 - i)) as usize * 3 + 2]);
                     }
                     let texture_index_temp = [texture_index[0], texture_index[1], texture_index[2]];

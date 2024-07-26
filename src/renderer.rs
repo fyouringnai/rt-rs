@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use cgmath::point3;
+use cgmath::{point3, vec3};
 use glow::{Context, HasContext, COLOR_BUFFER_BIT, FRAMEBUFFER};
 use slint::ComponentHandle;
 
@@ -43,9 +43,14 @@ impl Renderer {
             "shaders/path_tracing.frag",
         );
         let screen_buffer = ScreenBuffer::new(&gl, 1600, 1200);
-        let model = unsafe { Model::new(&gl, "models/furina_w/furina.obj") };
+        let model = unsafe { Model::new(&gl, "models/furina_b/furina.obj") };
         let mut bvh_tree = BVHTree::new(&gl);
         let mut primitives = Vec::new();
+        let basic_transform = vec![
+            vec3(0.0, 0.0, 0.0),
+            vec3(0.0, 0.0, 0.0),
+            vec3(1.0, 1.0, 1.0),
+        ];
         let floor_vert = vec![
             [-1.0, 0.0, -1.0],
             [-1.0, 0.0, 1.0],
@@ -53,7 +58,8 @@ impl Renderer {
             [1.0, 0.0, -1.0],
             [0.0, 1.0, 0.0],
         ];
-        let floor = Object::new_rectangle(floor_vert, [0.73, 0.73, 0.73], DIFFUSE);
+        let floor =
+            Object::new_rectangle(&floor_vert, [0.73, 0.73, 0.73], &basic_transform, DIFFUSE);
         let right_wall_vert = vec![
             [1.0, 0.0, -1.0],
             [1.0, 0.0, 1.0],
@@ -61,7 +67,12 @@ impl Renderer {
             [1.0, 2.0, -1.0],
             [-1.0, 0.0, 0.0],
         ];
-        let right_wall = Object::new_rectangle(right_wall_vert, [0.65, 0.05, 0.05], DIFFUSE);
+        let right_wall = Object::new_rectangle(
+            &right_wall_vert,
+            [0.65, 0.05, 0.05],
+            &basic_transform,
+            DIFFUSE,
+        );
         let left_wall_vert = vec![
             [-1.0, 0.0, -1.0],
             [-1.0, 0.0, 1.0],
@@ -69,7 +80,12 @@ impl Renderer {
             [-1.0, 2.0, -1.0],
             [1.0, 0.0, 0.0],
         ];
-        let left_wall = Object::new_rectangle(left_wall_vert, [0.12, 0.45, 0.15], DIFFUSE);
+        let left_wall = Object::new_rectangle(
+            &left_wall_vert,
+            [0.12, 0.45, 0.15],
+            &basic_transform,
+            DIFFUSE,
+        );
         let ceiling_vert = vec![
             [-1.0, 2.0, -1.0],
             [-1.0, 2.0, 1.0],
@@ -77,7 +93,8 @@ impl Renderer {
             [1.0, 2.0, -1.0],
             [0.0, -1.0, 0.0],
         ];
-        let ceiling = Object::new_rectangle(ceiling_vert, [0.73, 0.73, 0.73], DIFFUSE);
+        let ceiling =
+            Object::new_rectangle(&ceiling_vert, [0.73, 0.73, 0.73], &basic_transform, DIFFUSE);
         let back_wall_vert = vec![
             [-1.0, 0.0, -1.0],
             [1.0, 0.0, -1.0],
@@ -85,23 +102,89 @@ impl Renderer {
             [-1.0, 2.0, -1.0],
             [0.0, 0.0, 1.0],
         ];
-        let back_wall = Object::new_rectangle(back_wall_vert, [1.0, 1.0, 1.0], DIFFUSE);
+        let back_wall =
+            Object::new_rectangle(&back_wall_vert, [1.0, 1.0, 1.0], &basic_transform, DIFFUSE);
         let ceiling_light_vert = vec![
-            [-0.23,1.99, -0.23],
-            [-0.23, 1.99, 0.23],
-            [0.23, 1.99, 0.23],
-            [0.23, 1.99, -0.23],
+            [-0.52, 1.99, -0.52],
+            [-0.52, 1.99, 0.52],
+            [0.52, 1.99, 0.52],
+            [0.52, 1.99, -0.52],
             [0.0, -1.0, 0.0],
         ];
-        let ceiling_light =
-            Object::new_rectangle(ceiling_light_vert, [15.0, 15.0, 15.0], DIFFUSE_LIGHT);
+        let ceiling_light = Object::new_rectangle(
+            &ceiling_light_vert,
+            [5.0, 5.0, 5.0],
+            &basic_transform,
+            DIFFUSE_LIGHT,
+        );
+
+        let cube_vert = vec![
+            //第一个面
+            [-1.0, 0.0, -1.0],
+            [-1.0, 0.0, 1.0],
+            [1.0, 0.0, 1.0],
+            [1.0, 0.0, -1.0],
+            [0.0, -1.0, 0.0],
+            //第二个面
+            [-1.0, 0.0, -1.0],
+            [-1.0, 0.0, 1.0],
+            [-1.0, 1.0, 1.0],
+            [-1.0, 1.0, -1.0],
+            [-1.0, 0.0, 0.0],
+            //第三个面
+            [-1.0, 0.0, -1.0],
+            [1.0, 0.0, -1.0],
+            [1.0, 1.0, -1.0],
+            [-1.0, 1.0, -1.0],
+            [0.0, 0.0, -1.0],
+            //第四个面
+            [-1.0, 0.0, 1.0],
+            [1.0, 0.0, 1.0],
+            [1.0, 1.0, 1.0],
+            [-1.0, 1.0, 1.0],
+            [0.0, 0.0, 1.0],
+            //第五个面
+            [1.0, 0.0, -1.0],
+            [1.0, 0.0, 1.0],
+            [1.0, 1.0, 1.0],
+            [1.0, 1.0, -1.0],
+            [1.0, 0.0, 0.0],
+            //第六个面
+            [1.0, 1.0, -1.0],
+            [1.0, 1.0, 1.0],
+            [-1.0, 1.0, 1.0],
+            [-1.0, 1.0, -1.0],
+            [0.0, 1.0, 0.0],
+        ];
+
+        let box_tall_transform = vec![
+            vec3(-0.4, 0.0, -0.35),
+            vec3(0.0, 15.0, 0.0),
+            vec3(0.25, 1.2, 0.25),
+        ];
+        let mut box_tall =
+            Object::new_box(&cube_vert, [0.73, 0.73, 0.73], &box_tall_transform, DIFFUSE);
+
+        let box_short_transform = vec![
+            vec3(0.3, 0.0, 0.45),
+            vec3(0.0, -18.0, 0.0),
+            vec3(0.35, 0.7, 0.35),
+        ];
+        let mut box_short = Object::new_box(
+            &cube_vert,
+            [0.73, 0.73, 0.73],
+            &box_short_transform,
+            DIFFUSE,
+        );
+        primitives.append(&mut box_tall);
+        primitives.append(&mut box_short);
         primitives.push(floor);
         primitives.push(right_wall);
         primitives.push(left_wall);
         primitives.push(ceiling);
         primitives.push(back_wall);
         primitives.push(ceiling_light);
-        //model.get_primitives(&mut primitives, DIFFUSE);
+        //model.get_primitives(&mut primitives, &basic_transform, DIFFUSE);
         bvh_tree.build(&primitives);
         bvh_tree.set_texture(&gl);
         let renderer = Renderer {
