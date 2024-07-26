@@ -129,4 +129,10 @@ impl Shader {
             }
         }
     }
+
+    pub fn delete(&self, gl: &Context) {
+        unsafe {
+            gl.delete_program(self.id);
+        }
+    }
 }

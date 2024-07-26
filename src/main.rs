@@ -31,7 +31,7 @@ pub fn main() {
                 }
                 slint::RenderingState::AfterRendering => {}
                 slint::RenderingState::RenderingTeardown => {
-                    renderer = None;
+                    drop(renderer.take());
                 }
                 _ => {}
             })

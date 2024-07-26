@@ -67,8 +67,6 @@ impl Screen {
 
 pub struct ScreenBuffer {
     fbo: [ScreenFBO; 2],
-    width: i32,
-    height: i32,
 }
 
 impl ScreenBuffer {
@@ -77,10 +75,8 @@ impl ScreenBuffer {
             ScreenFBO::new(gl, width, height),
             ScreenFBO::new(gl, width, height),
         ];
-        let width = width;
-        let height = height;
 
-        Self { fbo, width, height }
+        Self { fbo }
     }
 
     pub fn set_current_buffer(&mut self, gl: &Context, render_loop: i32) {
@@ -104,15 +100,13 @@ impl ScreenBuffer {
     }
 
     pub fn resize(&mut self, gl: &Context, width: i32, height: i32) {
-        if self.width != width || self.height != height {
-            self.fbo[0].delete(gl);
-            self.fbo[1].delete(gl);
+        self.fbo[0].delete(gl);
+        self.fbo[1].delete(gl);
 
-            self.fbo = [
-                ScreenFBO::new(gl, width, height),
-                ScreenFBO::new(gl, width, height),
-            ];
-        }
+        self.fbo = [
+            ScreenFBO::new(gl, width, height),
+            ScreenFBO::new(gl, width, height),
+        ];
     }
 
     pub fn delete(&self, gl: &Context) {

@@ -17,7 +17,15 @@ impl ScreenFBO {
             gl.bind_framebuffer(FRAMEBUFFER, Some(fbo));
             gl.bind_texture(TEXTURE_2D, Some(texture));
             gl.tex_image_2d(
-                TEXTURE_2D, 0, RGB as i32, width, height, 0, RGB, FLOAT, None,
+                TEXTURE_2D,
+                0,
+                RGB32F as i32,
+                width,
+                height,
+                0,
+                RGB,
+                FLOAT,
+                None,
             );
             assert_eq!(gl.get_error(), NO_ERROR);
 

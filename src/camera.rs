@@ -135,7 +135,12 @@ impl Camera {
 
     pub fn process_mouse_wheel(&mut self, app: &App) {
         let offset = self.wheel_sensitivity * app.get_mouse_wheel_offset() as f32;
+        let mut scolled = false;
         self.fov += offset;
+
+        if offset != 0.0 {
+            scolled = true;
+        }
 
         if self.fov < 1.0 {
             self.fov = 1.0;
@@ -143,7 +148,9 @@ impl Camera {
         if self.fov > 90.0 {
             self.fov = 90.0;
         }
-        self.update_camera_vectors();
+        if scolled {
+            self.update_camera_vectors();
+        }
     }
 
     pub fn update_ratio(&mut self, width: i32, height: i32) {
@@ -193,5 +200,6 @@ impl Camera {
                 * (self.width as f32 / self.height as f32)
                 * (self.fov / 2.0).to_radians().tan()
             - self.up * (self.fov / 2.0).to_radians().tan();
+        self.render_loop = 0;
     }
 }

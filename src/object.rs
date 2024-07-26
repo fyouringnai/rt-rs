@@ -59,5 +59,4 @@ impl Object {
             material,
         }
     }
-
 }

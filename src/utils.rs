@@ -16,6 +16,7 @@ pub enum MATERIAL {
     DIFFUSE = 1,
     METAL = 2,
     DIELECTRIC = 3,
+    DIFFUSE_LIGHT = 4,
 }
 
 pub const MAX_FLOAT: f32 = 3.402823466e+38;

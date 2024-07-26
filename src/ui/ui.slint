@@ -20,6 +20,8 @@ export component App inherits Window {
 
     out property <float> depths: 5.0;
 
+    in-out property <bool> real-time: false;
+
     preferred-width: 800px;
     preferred-height: 600px;
     title <=> fps;
@@ -35,6 +37,14 @@ export component App inherits Window {
                     background: #f2f2f2;
                     VerticalLayout {
                         HorizontalLayout {
+                            VerticalBox {
+                                width: 50%;
+
+                                CheckBox {
+                                    text: "Real time";
+                                    checked <=> real-time;
+                                }
+                            }
 
                             VerticalBox {
                                 width: 50%;
@@ -49,7 +59,9 @@ export component App inherits Window {
                                     maximum: 100;
                                 }
                             }
+                        }
 
+                        HorizontalLayout {
                             VerticalBox {
                                 width: 50%;
 
@@ -64,10 +76,6 @@ export component App inherits Window {
                                     maximum: 100;
                                 }
                             }
-                        }
-
-                        HorizontalLayout {
-                            VerticalBox { }
                         }
                     }
                 }

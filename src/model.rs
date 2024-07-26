@@ -175,6 +175,14 @@ impl Model {
         self.texture_loaded.push(texture.clone());
         texture
     }
+
+    pub fn delete(&self, gl: &Context) {
+        for texture in &self.texture_loaded {
+            unsafe {
+                gl.delete_texture(texture.id);
+            }
+        }
+    }
 }
 unsafe fn texture_from_file(gl: &Context, path: &str, directory: &str) -> NativeTexture {
     let file_path = format!("{}/{}", directory, path);

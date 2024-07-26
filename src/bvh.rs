@@ -101,6 +101,8 @@ pub struct BVHTree {
     linear_bvh_node: Vec<LinearBVHNode>,
     bvh_texture: Texture,
     vertices_texture: Texture,
+    node_number: i32,
+    vertices_number: i32,
 }
 
 impl BVHTree {
@@ -110,6 +112,8 @@ impl BVHTree {
             linear_bvh_node: Vec::new(),
             bvh_texture: unsafe { gl.create_texture().unwrap() },
             vertices_texture: unsafe { gl.create_texture().unwrap() },
+            node_number: 0,
+            vertices_number: 0,
         };
         bvh_tree
     }
@@ -184,6 +188,7 @@ impl BVHTree {
             node_data.push(node.aabb.shape.clone() as u32 as f32);
             node_data.push(node.aabb.material.clone() as u32 as f32);
             node_data.push(0.0);
+            self.node_number += 1;
         }
         let mut vertex_data = Vec::new();
         for primitive in &self.primitives {
@@ -200,6 +205,7 @@ impl BVHTree {
                     for _i in 0..26 {
                         vertex_data.push(0.0);
                     }
+                    self.vertices_number += 1;
                 }
                 SHAPE::RT_MESH => {
                     for vertex in &primitive.vertices {
@@ -207,6 +213,7 @@ impl BVHTree {
                         vertex_data.push(vertex[1]);
                         vertex_data.push(vertex[2]);
                     }
+                    self.vertices_number += 1;
                 }
                 SHAPE::RT_TRIANGLE => {
                     for vertex in &primitive.vertices {
@@ -220,6 +227,7 @@ impl BVHTree {
                     for _i in 0..18 {
                         vertex_data.push(0.0);
                     }
+                    self.vertices_number += 1;
                 }
                 SHAPE::RT_RECTANGLE => {
                     for vertex in &primitive.vertices {
@@ -233,17 +241,21 @@ impl BVHTree {
                     for _i in 0..15 {
                         vertex_data.push(0.0);
                     }
+                    self.vertices_number += 1;
                 }
             }
         }
+        let bvh_texture_size = self.node_number * 4;
+        let vertex_texture_size = self.vertices_number * 11;
         unsafe {
             gl.bind_texture(TEXTURE_2D, Some(self.bvh_texture));
+            assert_eq!(gl.get_error(), NO_ERROR);
             gl.tex_image_2d(
                 TEXTURE_2D,
                 0,
                 RGB32F as i32,
-                2048,
-                2048,
+                get_length(bvh_texture_size),
+                get_length(bvh_texture_size),
                 0,
                 RGB,
                 FLOAT,
@@ -256,12 +268,13 @@ impl BVHTree {
             gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MAG_FILTER, NEAREST as i32);
 
             gl.bind_texture(TEXTURE_2D, Some(self.vertices_texture));
+            assert_eq!(gl.get_error(), NO_ERROR);
             gl.tex_image_2d(
                 TEXTURE_2D,
                 0,
                 RGB32F as i32,
-                2048,
-                2048,
+                get_length(vertex_texture_size),
+                get_length(vertex_texture_size),
                 0,
                 RGB,
                 FLOAT,
@@ -425,4 +438,13 @@ fn partition_by_median(
         }
         primitive_info.swap(left as usize, right as usize);
     }
+}
+
+fn get_length(size: i32) -> i32 {
+    let mut length = 1;
+    let edge = (size as f32).sqrt().ceil() as i32;
+    while length < edge {
+        length <<= 1;
+    }
+    length
 }

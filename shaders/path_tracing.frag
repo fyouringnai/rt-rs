@@ -62,6 +62,7 @@ struct hitRecord
     vec3 normal;
     int material;
     vec3 albedo;
+    vec3 light;
 };
 hitRecord rec;
 
@@ -158,9 +159,9 @@ void setNormal(Ray r)
 
 vec3 getData(sampler2D dataTexture, float index)
 {
-    float col = mod(index, 2048.0);
-    float row = floor(index / 2048.0);
-    vec2 texCoord = vec2(col / 2048.0, row / 2048.0);
+    float col = mod(index + 0.5, textureSize(dataTexture, 0).x);
+    float row = floor((index + 0.5) / textureSize(dataTexture, 0).y);
+    vec2 texCoord = vec2(col / textureSize(dataTexture, 0).x, row / textureSize(dataTexture, 0).y);
     return texture(dataTexture, texCoord).rgb;
 }
 
@@ -233,6 +234,11 @@ vec3 diffuse(vec3 normal)
 vec3 metal(vec3 normal, vec3 direction)
 {
     return reflect(direction, normal);
+}
+
+vec3 diffuse_light(vec3 normal)
+{
+    return vec3(0.0, 0.0, 0.0);
 }
 
 vec3 centroidCoordinates(vec3 v0, vec3 v1, vec3 v2, vec3 p)
@@ -361,6 +367,28 @@ float hitRect(Rect rect, Ray r)
     }
 }
 
+void selectMaterial(int material)
+{
+    switch (material)
+    {
+    case 1:
+        rec.material = 1;
+        break;
+    case 2:
+        rec.material = 2;
+        break;
+    case 3:
+        rec.material = 3;
+        break;
+    case 4:
+        rec.material = 4;
+        break;
+    default:
+        rec.material = 0;
+        break;
+    }
+}
+
 bool intersectBVH(Ray r)
 {
     vec3 invDir = 1.0 / r.direction;
@@ -402,18 +430,7 @@ bool intersectBVH(Ray r)
                             hit = true;
                             sphere = sphere_t;
                             hitShape = 1;
-                            switch (int(node.material))
-                            {
-                            case 1:
-                                rec.material = 1;
-                                break;
-                            case 2:
-                                rec.material = 2;
-                                break;
-                            default:
-                                rec.material = 0;
-                                break;
-                            }
+                            selectMaterial(int(node.material));
                         }
                         break;
                     case 2:
@@ -425,18 +442,7 @@ bool intersectBVH(Ray r)
                             hit = true;
                             mesh = mesh_t;
                             hitShape = 2;
-                            switch (int(node.material))
-                            {
-                            case 1:
-                                rec.material = 1;
-                                break;
-                            case 2:
-                                rec.material = 2;
-                                break;
-                            default:
-                                rec.material = 0;
-                                break;
-                            }
+                            selectMaterial(int(node.material));
                         }
                         break;
                     case 3:
@@ -448,18 +454,7 @@ bool intersectBVH(Ray r)
                             hit = true;
                             tri = tri_t;
                             hitShape = 3;
-                            switch (int(node.material))
-                            {
-                            case 1:
-                                rec.material = 1;
-                                break;
-                            case 2:
-                                rec.material = 2;
-                                break;
-                            default:
-                                rec.material = 0;
-                                break;
-                            }
+                            selectMaterial(int(node.material));
                         }
                         break;
                     case 4:
@@ -471,18 +466,7 @@ bool intersectBVH(Ray r)
                             hit = true;
                             rect = rect_t;
                             hitShape = 4;
-                            switch (int(node.material))
-                            {
-                            case 1:
-                                rec.material = 1;
-                                break;
-                            case 2:
-                                rec.material = 2;
-                                break;
-                            default:
-                                rec.material = 0;
-                                break;
-                            }
+                            selectMaterial(int(node.material));
                         }
                         break;
                     default:
@@ -589,35 +573,66 @@ bool hitWorld(Ray r)
 
 vec3 shading(Ray r)
 {
-    vec3 color = vec3(1.0, 1.0, 1.0);
-    bool hitAnything = false;
+    vec3 color = vec3(0.0, 0.0, 0.0);
+    vec3 attenuation = vec3(1.0, 1.0, 1.0);
+    vec3 direction = vec3(0.0, 0.0, 0.0);
+    bool light = false;
     for (int i = 0; i < depths; i++)
     {
-        if (hitWorld(r))
+        if (hitWorld(r) && !light)
         {
+            switch (rec.material)
+            {
+            case 1:
+                direction = diffuse(rec.normal);
+                if (direction == vec3(0.0, 0.0, 0.0))
+                {
+                    rec.light = rec.albedo;
+                    light = true;
+                    break;
+                }
+                rec.light = vec3(0.0, 0.0, 0.0);
+                r.direction = direction;
+                break;
 
-            if (rec.material == 1)
-            {
-                r.direction = diffuse(rec.normal);
-            }
-            else if (rec.material == 2)
-            {
-                r.direction = metal(rec.normal, r.direction);
+            case 2:
+                direction = metal(rec.normal, r.direction);
+                if (direction == vec3(0.0, 0.0, 0.0))
+                {
+                    rec.light = rec.albedo;
+                    light = true;
+                    break;
+                }
+                rec.light = vec3(0.0, 0.0, 0.0);
+                r.direction = direction;
+                break;
+            case 3:
+                break;
+            case 4:
+                direction = diffuse_light(rec.normal);
+                if (direction == vec3(0.0, 0.0, 0.0))
+                {
+                    rec.light = rec.albedo;
+                    light = true;
+                    break;
+                }
+                rec.light = vec3(0.0, 0.0, 0.0);
+                r.direction = direction;
+                break;
             }
 
             r.origin = rec.p;
             r.hitMin = 3.402823466e+38;
-            color *= rec.albedo;
-            hitAnything = true;
+            color = rec.light;
+            if (!light)
+                attenuation *= rec.albedo;
+            color *= attenuation;
         }
         else
         {
-            color *= vec3(1.0, 1.0, 1.0);
             break;
         }
     }
-    if (!hitAnything)
-        color = vec3(0.0, 0.0, 0.0);
     return color;
 }
 
