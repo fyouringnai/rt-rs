@@ -58,7 +58,9 @@ struct Rect
 struct hitRecord
 {
     vec3 p;
+    bool frontFace;
     float hitMin;
+    float constant;
     vec3 normal;
     int material;
     vec3 albedo;
@@ -78,6 +80,7 @@ struct LinearBVHNode
     float axis;
     float child_offset;
     float shape;
+    float constant;
     float material;
 };
 
@@ -103,6 +106,7 @@ uniform int verticesNum;
 uniform int nodeNum;
 uniform float randOrigin;
 uniform int depths;
+uniform bool faceCull;
 uniform float index;
 
 vec3 getData(sampler2D dataTexture, float index);
@@ -151,9 +155,17 @@ vec3 random_in_unit_sphere()
     return p;
 }
 
+float reflectance(float cosine, float ref_idx)
+{
+    float r0 = (1.0 - ref_idx) / (1.0 + ref_idx);
+    r0 = r0 * r0;
+    return r0 + (1.0 - r0) * pow((1.0 - cosine), 5.0);
+}
+
 void setNormal(Ray r)
 {
     bool frontFace = dot(r.direction, rec.normal) < 0.0;
+    rec.frontFace = frontFace;
     rec.normal = frontFace ? rec.normal : -rec.normal;
 }
 
@@ -222,11 +234,12 @@ LinearBVHNode getBVHNode(int index)
     node.primitives_num = getData(bvh_texture, float(index * 4 + 2)).y;
     node.axis = getData(bvh_texture, float(index * 4 + 2)).z;
     node.shape = getData(bvh_texture, float(index * 4 + 3)).x;
-    node.material = getData(bvh_texture, float(index * 4 + 3)).y;
+    node.constant = getData(bvh_texture, float(index * 4 + 3)).y;
+    node.material = getData(bvh_texture, float(index * 4 + 3)).z;
     return node;
 }
 
-vec3 diffuse(vec3 normal)
+vec3 diffuse()
 {
     vec3 out_dir = rec.normal + random_in_unit_sphere();
     if (abs(out_dir.x) < 1E-8 || abs(out_dir.y) < 1E-8 || abs(out_dir.z) < 1E-8)
@@ -236,9 +249,27 @@ vec3 diffuse(vec3 normal)
     return normalize(out_dir);
 }
 
-vec3 metal(vec3 normal, vec3 direction)
+vec3 metal(vec3 direction)
 {
-    return reflect(direction, normal);
+    return reflect(direction, rec.normal);
+}
+
+vec3 dielectric(vec3 direction)
+{
+    float refraction_ratio = rec.frontFace ? 1.0 / rec.constant : rec.constant;
+    float cos_theta = dot(-direction, rec.normal);
+    float sin_theta = sqrt(1.0 - cos_theta * cos_theta);
+    bool cannot_refract = refraction_ratio * sin_theta > 1.0;
+    vec3 out_dir;
+    if (cannot_refract || reflectance(cos_theta, refraction_ratio) > rand())
+    {
+        out_dir = reflect(direction, rec.normal);
+    }
+    else
+    {
+        out_dir = refract(direction, rec.normal, refraction_ratio);
+    }
+    return out_dir;
 }
 
 vec3 diffuse_light(vec3 normal)
@@ -279,6 +310,10 @@ float hitSphere(Sphere sphere, Ray r)
             return dist;
         else
         {
+            if (faceCull)
+            {
+                return -1.0;
+            }
             float dist = (h + sqrt(discriminant)) / a;
             if (dist > 0.00001)
                 return dist;
@@ -293,9 +328,19 @@ float hitMesh(Mesh mesh, Ray r)
     vec3 e1 = mesh.v[1] - mesh.v[0];
     vec3 e2 = mesh.v[2] - mesh.v[0];
     vec3 n = normalize(cross(e1, e2));
-    if (dot(n, r.direction) >= 0.0)
+    if (faceCull)
     {
-        return -1.0;
+        if (dot(n, r.direction) >= 0.0)
+        {
+            return -1.0;
+        }
+    }
+    else
+    {
+        if (abs(dot(n, r.direction)) < 0.00001)
+        {
+            return -1.0;
+        }
     }
     vec3 s = (r.origin - mesh.v[0]);
     vec3 s1 = (cross(r.direction, e2));
@@ -317,9 +362,19 @@ float hitTriangle(Triangle tri, Ray r)
 {
 
     vec3 n = normalize(tri.n);
-    if (dot(n, r.direction) >= 0.0)
+    if (faceCull)
     {
-        return -1.0;
+        if (dot(n, r.direction) >= 0.0)
+        {
+            return -1.0;
+        }
+    }
+    else
+    {
+        if (abs(dot(n, r.direction)) < 0.00001)
+        {
+            return -1.0;
+        }
     }
     vec3 e1 = tri.v[1] - tri.v[0];
     vec3 e2 = tri.v[2] - tri.v[0];
@@ -342,9 +397,19 @@ float hitTriangle(Triangle tri, Ray r)
 float hitRect(Rect rect, Ray r)
 {
     vec3 n = normalize(rect.n);
-    if (dot(n, r.direction) >= 0.0)
+    if (faceCull)
     {
-        return -1.0;
+        if (dot(n, r.direction) >= 0.0)
+        {
+            return -1.0;
+        }
+    }
+    else
+    {
+        if (abs(dot(n, r.direction)) < 0.00001)
+        {
+            return -1.0;
+        }
     }
     Triangle tri1;
     Triangle tri2;
@@ -372,7 +437,7 @@ float hitRect(Rect rect, Ray r)
     }
 }
 
-void selectMaterial(int material)
+void selectMaterial(LinearBVHNode node, int material)
 {
     switch (material)
     {
@@ -384,6 +449,7 @@ void selectMaterial(int material)
         break;
     case 3:
         rec.material = 3;
+        rec.constant = node.constant;
         break;
     case 4:
         rec.material = 4;
@@ -435,7 +501,7 @@ bool intersectBVH(Ray r)
                             hit = true;
                             sphere = sphere_t;
                             hitShape = 1;
-                            selectMaterial(int(node.material));
+                            selectMaterial(node, int(node.material));
                         }
                         break;
                     case 2:
@@ -447,7 +513,7 @@ bool intersectBVH(Ray r)
                             hit = true;
                             mesh = mesh_t;
                             hitShape = 2;
-                            selectMaterial(int(node.material));
+                            selectMaterial(node, int(node.material));
                         }
                         break;
                     case 3:
@@ -459,7 +525,7 @@ bool intersectBVH(Ray r)
                             hit = true;
                             tri = tri_t;
                             hitShape = 3;
-                            selectMaterial(int(node.material));
+                            selectMaterial(node, int(node.material));
                         }
                         break;
                     case 4:
@@ -471,7 +537,7 @@ bool intersectBVH(Ray r)
                             hit = true;
                             rect = rect_t;
                             hitShape = 4;
-                            selectMaterial(int(node.material));
+                            selectMaterial(node, int(node.material));
                         }
                         break;
                     default:
@@ -589,17 +655,17 @@ vec3 shading(Ray r)
             switch (rec.material)
             {
             case 1:
-                direction = diffuse(rec.normal);
+                r.direction = diffuse();
                 rec.light = vec3(0.0, 0.0, 0.0);
-                r.direction = direction;
                 break;
 
             case 2:
-                direction = metal(rec.normal, r.direction);
+                r.direction = metal(r.direction);
                 rec.light = vec3(0.0, 0.0, 0.0);
-                r.direction = direction;
                 break;
             case 3:
+                r.direction = dielectric(r.direction);
+                rec.light = vec3(0.0, 0.0, 0.0);
                 break;
             case 4:
                 direction = diffuse_light(rec.normal);

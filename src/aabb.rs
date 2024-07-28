@@ -7,6 +7,7 @@ pub struct AABB {
     pub min: [f32; 3],
     pub max: [f32; 3],
     pub shape: SHAPE,
+    pub constant: f32,
     pub material: MATERIAL,
 }
 
@@ -16,17 +17,19 @@ impl AABB {
             min: [MAX_FLOAT, MAX_FLOAT, MAX_FLOAT],
             max: [MIN_FLOAT, MIN_FLOAT, MIN_FLOAT],
             shape: SHAPE::NONE,
+            constant: 0.0,
             material: NONE,
         };
 
         aabb
     }
 
-    pub fn new_mesh(vertices: Vec<[f32; 3]>, material: MATERIAL) -> AABB {
+    pub fn new_mesh(vertices: Vec<[f32; 3]>, constant: f32, material: MATERIAL) -> AABB {
         let mut aabb = AABB {
             min: [MAX_FLOAT, MAX_FLOAT, MAX_FLOAT],
             max: [MIN_FLOAT, MIN_FLOAT, MIN_FLOAT],
             shape: RT_MESH,
+            constant,
             material,
         };
 
@@ -44,22 +47,24 @@ impl AABB {
         aabb
     }
 
-    pub fn new_sphere(center: [f32; 3], radius: f32, material: MATERIAL) -> AABB {
+    pub fn new_sphere(center: [f32; 3], radius: f32, constant: f32, material: MATERIAL) -> AABB {
         let aabb = AABB {
             min: [center[0] - radius, center[1] - radius, center[2] - radius],
             max: [center[0] + radius, center[1] + radius, center[2] + radius],
             shape: RT_SPHERE,
+            constant,
             material,
         };
 
         aabb
     }
 
-    pub fn new_triangle(vertices: Vec<[f32; 3]>, material: MATERIAL) -> AABB {
+    pub fn new_triangle(vertices: Vec<[f32; 3]>, constant: f32, material: MATERIAL) -> AABB {
         let mut aabb = AABB {
             min: [MAX_FLOAT, MAX_FLOAT, MAX_FLOAT],
             max: [MIN_FLOAT, MIN_FLOAT, MIN_FLOAT],
             shape: SHAPE::RT_TRIANGLE,
+            constant,
             material,
         };
 
@@ -77,11 +82,12 @@ impl AABB {
         aabb
     }
 
-    pub fn new_rectangle(vertices: Vec<[f32; 3]>, material: MATERIAL) -> AABB {
+    pub fn new_rectangle(vertices: Vec<[f32; 3]>, constant: f32, material: MATERIAL) -> AABB {
         let mut aabb = AABB {
             min: [MAX_FLOAT, MAX_FLOAT, MAX_FLOAT],
             max: [MIN_FLOAT, MIN_FLOAT, MIN_FLOAT],
             shape: RT_RECTANGLE,
+            constant,
             material,
         };
 

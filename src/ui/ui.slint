@@ -21,6 +21,8 @@ export component App inherits Window {
     out property <float> depths: 5.0;
 
     in-out property <bool> real-time: false;
+    
+    in-out property <bool> face-cull: false;
 
     preferred-width: 800px;
     preferred-height: 600px;
@@ -43,6 +45,11 @@ export component App inherits Window {
                                 CheckBox {
                                     text: "Real time";
                                     checked <=> real-time;
+                                }
+                                
+                                CheckBox {
+                                    text: "Face cull";
+                                    checked <=> face-cull;
                                 }
                             }
 

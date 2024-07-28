@@ -9,6 +9,7 @@ pub struct Object {
     pub center: [f32; 3],
     pub radius: f32,
     pub albedo: [f32; 3],
+    pub constant: f32,
     pub material: MATERIAL,
 }
 
@@ -17,25 +18,29 @@ impl Object {
         center: [f32; 3],
         radius: f32,
         albedo: [f32; 3],
+        transform: &Vec<Vector3<f32>>,
+        constant: f32,
         material: MATERIAL,
     ) -> Object {
         Object {
             shape: SHAPE::RT_SPHERE,
             vertices: Vec::new(),
-            center,
+            center: translated(&center, &trans(transform[0], transform[1], transform[2])),
             radius,
             albedo,
+            constant,
             material,
         }
     }
 
-    pub fn new_mesh(vertices: Vec<[f32; 3]>, material: MATERIAL) -> Object {
+    pub fn new_mesh(vertices: Vec<[f32; 3]>, constant: f32, material: MATERIAL) -> Object {
         Object {
             shape: SHAPE::RT_MESH,
             vertices,
             center: [0.0, 0.0, 0.0],
             radius: 0.0,
             albedo: [0.0, 0.0, 0.0],
+            constant,
             material,
         }
     }
@@ -44,6 +49,7 @@ impl Object {
         vertices: &Vec<[f32; 3]>,
         albedo: [f32; 3],
         transform: &Vec<Vector3<f32>>,
+        constant: f32,
         material: MATERIAL,
     ) -> Object {
         let model = trans(transform[0], transform[1], transform[2]);
@@ -59,6 +65,7 @@ impl Object {
             center: [0.0, 0.0, 0.0],
             radius: 0.0,
             albedo,
+            constant,
             material,
         }
     }
@@ -67,6 +74,7 @@ impl Object {
         vertices: &Vec<[f32; 3]>,
         albedo: [f32; 3],
         transform: &Vec<Vector3<f32>>,
+        constant: f32,
         material: MATERIAL,
     ) -> Object {
         let model = trans(transform[0], transform[1], transform[2]);
@@ -83,6 +91,7 @@ impl Object {
             center: [0.0, 0.0, 0.0],
             radius: 0.0,
             albedo,
+            constant,
             material,
         }
     }
@@ -91,6 +100,7 @@ impl Object {
         vertices: &Vec<[f32; 3]>,
         albedo: [f32; 3],
         transform: &Vec<Vector3<f32>>,
+        constant: f32,
         material: MATERIAL,
     ) -> Vec<Object> {
         let mut objects = Vec::new();
@@ -110,6 +120,7 @@ impl Object {
                 center: [0.0, 0.0, 0.0],
                 radius: 0.0,
                 albedo,
+                constant,
                 material: material.clone(),
             };
             objects.push(object);

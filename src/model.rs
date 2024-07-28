@@ -27,6 +27,7 @@ impl Model {
         &self,
         primitives: &mut Vec<Object>,
         transform: &Vec<Vector3<f32>>,
+        constant: f32,
         material: MATERIAL,
     ) {
         let mut vertices = Vec::new();
@@ -74,7 +75,7 @@ impl Model {
                     let texture_index_temp = [texture_index[0], texture_index[1], texture_index[2]];
                     vertex.push(texture_index_temp);
                     vertex.push([texture_index[3], 0.0, 0.0]);
-                    let triangle = Object::new_mesh(vertex, material.clone());
+                    let triangle = Object::new_mesh(vertex, constant, material.clone());
                     primitives.push(triangle);
                 }
                 vertices_num += 1;

@@ -129,6 +129,7 @@ impl BVHTree {
                     aabb = AABB::new_sphere(
                         primitive.center,
                         primitive.radius,
+                        primitive.constant,
                         primitive.material.clone(),
                     );
                 }
@@ -137,21 +138,23 @@ impl BVHTree {
                     for i in 0..3 {
                         vertex.push(primitive.vertices[i * 3]);
                     }
-                    aabb = AABB::new_mesh(vertex, primitive.material.clone());
+                    aabb = AABB::new_mesh(vertex, primitive.constant, primitive.material.clone());
                 }
                 SHAPE::RT_TRIANGLE => {
                     let mut vertex = Vec::new();
                     for i in 0..3 {
                         vertex.push(primitive.vertices[i]);
                     }
-                    aabb = AABB::new_triangle(vertex, primitive.material.clone());
+                    aabb =
+                        AABB::new_triangle(vertex, primitive.constant, primitive.material.clone());
                 }
                 SHAPE::RT_RECTANGLE => {
                     let mut vertex = Vec::new();
                     for i in 0..4 {
                         vertex.push(primitive.vertices[i]);
                     }
-                    aabb = AABB::new_rectangle(vertex, primitive.material.clone());
+                    aabb =
+                        AABB::new_rectangle(vertex, primitive.constant, primitive.material.clone());
                 }
             }
 
@@ -186,8 +189,8 @@ impl BVHTree {
             node_data.push(node.n_primitives as f32);
             node_data.push(node.axis as f32);
             node_data.push(node.aabb.shape.clone() as u32 as f32);
+            node_data.push(node.aabb.constant);
             node_data.push(node.aabb.material.clone() as u32 as f32);
-            node_data.push(0.0);
             self.node_number += 1;
         }
         let mut vertex_data = Vec::new();

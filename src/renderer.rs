@@ -26,6 +26,7 @@ pub struct Renderer {
     frame_count: i32,
     last_frame: Instant,
     depths: f32,
+    face_cull: bool,
     width: i32,
     height: i32,
 }
@@ -58,8 +59,13 @@ impl Renderer {
             [1.0, 0.0, -1.0],
             [0.0, 1.0, 0.0],
         ];
-        let floor =
-            Object::new_rectangle(&floor_vert, [0.73, 0.73, 0.73], &basic_transform, DIFFUSE);
+        let floor = Object::new_rectangle(
+            &floor_vert,
+            [0.73, 0.73, 0.73],
+            &basic_transform,
+            0.0,
+            DIFFUSE,
+        );
         let right_wall_vert = vec![
             [1.0, 0.0, -1.0],
             [1.0, 0.0, 1.0],
@@ -71,6 +77,7 @@ impl Renderer {
             &right_wall_vert,
             [0.65, 0.05, 0.05],
             &basic_transform,
+            0.0,
             DIFFUSE,
         );
         let left_wall_vert = vec![
@@ -84,6 +91,7 @@ impl Renderer {
             &left_wall_vert,
             [0.12, 0.45, 0.15],
             &basic_transform,
+            0.0,
             DIFFUSE,
         );
         let ceiling_vert = vec![
@@ -93,8 +101,13 @@ impl Renderer {
             [1.0, 2.0, -1.0],
             [0.0, -1.0, 0.0],
         ];
-        let ceiling =
-            Object::new_rectangle(&ceiling_vert, [0.73, 0.73, 0.73], &basic_transform, DIFFUSE);
+        let ceiling = Object::new_rectangle(
+            &ceiling_vert,
+            [0.73, 0.73, 0.73],
+            &basic_transform,
+            0.0,
+            DIFFUSE,
+        );
         let back_wall_vert = vec![
             [-1.0, 0.0, -1.0],
             [1.0, 0.0, -1.0],
@@ -102,8 +115,13 @@ impl Renderer {
             [-1.0, 2.0, -1.0],
             [0.0, 0.0, 1.0],
         ];
-        let back_wall =
-            Object::new_rectangle(&back_wall_vert, [1.0, 1.0, 1.0], &basic_transform, DIFFUSE);
+        let back_wall = Object::new_rectangle(
+            &back_wall_vert,
+            [1.0, 1.0, 1.0],
+            &basic_transform,
+            0.0,
+            DIFFUSE,
+        );
         let ceiling_light_vert = vec![
             [-0.52, 1.99, -0.52],
             [-0.52, 1.99, 0.52],
@@ -115,6 +133,7 @@ impl Renderer {
             &ceiling_light_vert,
             [5.0, 5.0, 5.0],
             &basic_transform,
+            0.0,
             DIFFUSE_LIGHT,
         );
 
@@ -162,8 +181,13 @@ impl Renderer {
             vec3(0.0, 15.0, 0.0),
             vec3(0.25, 1.2, 0.25),
         ];
-        let mut box_tall =
-            Object::new_box(&cube_vert, [0.73, 0.73, 0.73], &box_tall_transform, DIFFUSE);
+        let mut box_tall = Object::new_box(
+            &cube_vert,
+            [0.73, 0.73, 0.73],
+            &box_tall_transform,
+            0.0,
+            DIFFUSE,
+        );
 
         let box_short_transform = vec![
             vec3(0.3, 0.0, 0.45),
@@ -174,8 +198,10 @@ impl Renderer {
             &cube_vert,
             [0.73, 0.73, 0.73],
             &box_short_transform,
-            DIFFUSE,
+            1.5,
+            DIELECTRIC,
         );
+
         primitives.append(&mut box_tall);
         primitives.append(&mut box_short);
         primitives.push(floor);
@@ -184,7 +210,7 @@ impl Renderer {
         primitives.push(ceiling);
         primitives.push(back_wall);
         primitives.push(ceiling_light);
-        //model.get_primitives(&mut primitives, &basic_transform, DIFFUSE);
+        //model.get_primitives(&mut primitives, &basic_transform, 0.0, DIFFUSE);
         bvh_tree.build(&primitives);
         bvh_tree.set_texture(&gl);
         let renderer = Renderer {
@@ -200,6 +226,7 @@ impl Renderer {
             frame_count: 0,
             last_frame: Instant::now(),
             depths: 0.0,
+            face_cull: false,
             width: 1600,
             height: 1200,
         };
@@ -217,6 +244,7 @@ impl Renderer {
     fn real_time_render(&mut self, app: &App) {
         self.camera.render_loop = 0;
         self.depths = app.get_depths();
+        self.face_cull = app.get_face_cull();
         for _i in 0..app.get_sample_counts() as i32 {
             self.renderer_core(app);
         }
@@ -228,6 +256,10 @@ impl Renderer {
         if self.depths != app.get_depths() {
             self.camera.render_loop = 0;
             self.depths = app.get_depths();
+        }
+        if self.face_cull != app.get_face_cull() {
+            self.camera.render_loop = 0;
+            self.face_cull = app.get_face_cull();
         }
         self.renderer_core(app);
         self.renderer_draw();
@@ -273,6 +305,7 @@ impl Renderer {
         self.camera.use_camera(&self.gl, &self.shader, &size);
 
         self.shader.set_int(&self.gl, "depths", self.depths as i32);
+        self.shader.set_bool(&self.gl, "faceCull", self.face_cull);
 
         self.screen.draw_shader(&self.gl, &self.shader);
 
