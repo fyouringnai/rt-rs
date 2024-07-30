@@ -127,4 +127,42 @@ impl Object {
         }
         objects
     }
+
+    pub fn new_box_volume(
+        vertices: &Vec<[f32; 3]>,
+        albedo: [f32; 3],
+        transform: &Vec<Vector3<f32>>,
+        constant: f32,
+        material: MATERIAL,
+    ) -> Object {
+        let vertices = vec![
+            translated(
+                &vertices[0],
+                &trans(transform[0], transform[1], transform[2]),
+            ),
+            translated(
+                &vertices[1],
+                &trans(transform[0], transform[1], transform[2]),
+            ),
+            translated(
+                &vertices[2],
+                &trans(transform[0], transform[1], transform[2]),
+            ),
+            translated(
+                &vertices[3],
+                &trans(transform[0], transform[1], transform[2]),
+            ),
+        ];
+        let object = Object {
+            shape: SHAPE::RT_VOLUME,
+            vertices,
+            center: [0.0, 0.0, 0.0],
+            radius: 0.0,
+            albedo,
+            constant,
+            material: material.clone(),
+        };
+
+        object
+    }
 }

@@ -10,6 +10,7 @@ pub enum SHAPE {
     RT_MESH = 2,
     RT_TRIANGLE = 3,
     RT_RECTANGLE = 4,
+    RT_VOLUME = 5,
 }
 
 #[derive(Clone)]
@@ -19,6 +20,7 @@ pub enum MATERIAL {
     METAL = 2,
     DIELECTRIC = 3,
     DIFFUSE_LIGHT = 4,
+    ISOTROPIC = 5,
 }
 
 pub const MAX_FLOAT: f32 = 3.402823466e+38;

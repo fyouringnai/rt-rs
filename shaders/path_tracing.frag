@@ -24,6 +24,7 @@ struct Ray
     vec3 origin;
     vec3 direction;
     float hitMin;
+    float inside;
 };
 
 struct Sphere
@@ -55,12 +56,19 @@ struct Rect
     vec3 albedo;
 };
 
+struct boxVolume
+{
+    Rect rect[6];
+    vec3 albedo;
+};
+
 struct hitRecord
 {
     vec3 p;
     bool frontFace;
     float hitMin;
     float constant;
+    float inside;
     vec3 normal;
     int material;
     vec3 albedo;
@@ -107,7 +115,7 @@ uniform int nodeNum;
 uniform float randOrigin;
 uniform int depths;
 uniform bool faceCull;
-uniform float index;
+uniform bool gamma;
 
 vec3 getData(sampler2D dataTexture, float index);
 
@@ -153,6 +161,11 @@ vec3 random_in_unit_sphere()
         p = 2.0 * vec3(rand(), rand(), rand()) - vec3(1.0, 1.0, 1.0);
     } while (dot(p, p) >= 1.0);
     return p;
+}
+
+vec3 random_unit_vector()
+{
+    return normalize(random_in_unit_sphere());
 }
 
 float reflectance(float cosine, float ref_idx)
@@ -225,6 +238,66 @@ Rect getRect(int index)
     return rect;
 }
 
+boxVolume getBoxVolume(int index)
+{
+    boxVolume boxvolume;
+    vec3 x = getData(vertices_texture, float(index * 11));
+    vec3 y = getData(vertices_texture, float(index * 11 + 1));
+    vec3 z = getData(vertices_texture, float(index * 11 + 2));
+    vec3 o = getData(vertices_texture, float(index * 11 + 3));
+    vec3 albedo = getData(vertices_texture, float(index * 11 + 4));
+
+    vec3 _length = x - o;
+    vec3 _width = y - o;
+    vec3 _height = z - o;
+
+    boxvolume.rect[0].v[0] = o;
+    boxvolume.rect[0].v[1] = o + _length;
+    boxvolume.rect[0].v[2] = o + _length + _width;
+    boxvolume.rect[0].v[3] = o + _width;
+    boxvolume.rect[0].n = cross(_length, _width);
+    boxvolume.rect[0].albedo = albedo;
+
+    boxvolume.rect[1].v[0] = o;
+    boxvolume.rect[1].v[1] = o + _length;
+    boxvolume.rect[1].v[2] = o + _length + _height;
+    boxvolume.rect[1].v[3] = o + _height;
+    boxvolume.rect[1].n = cross(_height, _length);
+    boxvolume.rect[1].albedo = albedo;
+
+    boxvolume.rect[2].v[0] = o;
+    boxvolume.rect[2].v[1] = o + _width;
+    boxvolume.rect[2].v[2] = o + _width + _height;
+    boxvolume.rect[2].v[3] = o + _height;
+    boxvolume.rect[2].n = cross(_width, _height);
+    boxvolume.rect[2].albedo = albedo;
+
+    boxvolume.rect[3].v[0] = o + _length;
+    boxvolume.rect[3].v[1] = o + _length + _width;
+    boxvolume.rect[3].v[2] = o + _length + _width + _height;
+    boxvolume.rect[3].v[3] = o + _length + _height;
+    boxvolume.rect[3].n = cross(_height, _width);
+    boxvolume.rect[3].albedo = albedo;
+
+    boxvolume.rect[4].v[0] = o + _width;
+    boxvolume.rect[4].v[1] = o + _width + _height;
+    boxvolume.rect[4].v[2] = o + _width + _height + _length;
+    boxvolume.rect[4].v[3] = o + _width + _length;
+    boxvolume.rect[4].n = cross(_length, _height);
+    boxvolume.rect[4].albedo = albedo;
+
+    boxvolume.rect[5].v[0] = o + _height;
+    boxvolume.rect[5].v[1] = o + _height + _length;
+    boxvolume.rect[5].v[2] = o + _height + _length + _width;
+    boxvolume.rect[5].v[3] = o + _height + _width;
+    boxvolume.rect[5].n = cross(_width, _length);
+    boxvolume.rect[5].albedo = albedo;
+
+    boxvolume.albedo = albedo;
+
+    return boxvolume;
+}
+
 LinearBVHNode getBVHNode(int index)
 {
     LinearBVHNode node;
@@ -241,7 +314,7 @@ LinearBVHNode getBVHNode(int index)
 
 vec3 diffuse()
 {
-    vec3 out_dir = rec.normal + random_in_unit_sphere();
+    vec3 out_dir = rec.normal + random_unit_vector();
     if (abs(out_dir.x) < 1E-8 || abs(out_dir.y) < 1E-8 || abs(out_dir.z) < 1E-8)
     {
         out_dir = rec.normal;
@@ -275,6 +348,11 @@ vec3 dielectric(vec3 direction)
 vec3 diffuse_light(vec3 normal)
 {
     return vec3(0.0, 0.0, 0.0);
+}
+
+vec3 isotropic()
+{
+    return random_unit_vector();
 }
 
 vec3 centroidCoordinates(vec3 v0, vec3 v1, vec3 v2, vec3 p)
@@ -396,21 +474,6 @@ float hitTriangle(Triangle tri, Ray r)
 
 float hitRect(Rect rect, Ray r)
 {
-    vec3 n = normalize(rect.n);
-    if (faceCull)
-    {
-        if (dot(n, r.direction) >= 0.0)
-        {
-            return -1.0;
-        }
-    }
-    else
-    {
-        if (abs(dot(n, r.direction)) < 0.00001)
-        {
-            return -1.0;
-        }
-    }
     Triangle tri1;
     Triangle tri2;
     tri1.v[0] = rect.v[0];
@@ -435,6 +498,41 @@ float hitRect(Rect rect, Ray r)
     {
         return -1.0;
     }
+}
+
+float hitBoxVolume(boxVolume boxvolume, Ray r, bool near)
+{
+    float t;
+
+    if (near)
+    {
+        t = 3.402823466e+38;
+        for (int i = 0; i < 6; i++)
+        {
+            float t1 = hitRect(boxvolume.rect[i], r);
+            if (t1 < t && t1 != -1.0)
+            {
+                t = t1;
+            }
+        }
+        if (t == 3.402823466e+38)
+        {
+            t = -1.0;
+        }
+    }
+    else
+    {
+        t = -3.402823466e+38;
+        for (int i = 0; i < 6; i++)
+        {
+            float t1 = hitRect(boxvolume.rect[i], r);
+            if (t1 > t)
+            {
+                t = t1;
+            }
+        }
+    }
+    return t;
 }
 
 void selectMaterial(LinearBVHNode node, int material)
@@ -475,6 +573,7 @@ bool intersectBVH(Ray r)
     Sphere sphere;
     Triangle tri;
     Rect rect;
+    boxVolume boxvolume;
     while (true)
     {
         LinearBVHNode node = getBVHNode(currentNodeIndex);
@@ -495,7 +594,7 @@ bool intersectBVH(Ray r)
                     case 1:
                         Sphere sphere_t = getSphere(int(node.child_offset + i));
                         dis_t = hitSphere(sphere_t, r);
-                        if (dis_t > 0.0 && dis_t < r.hitMin)
+                        if (dis_t > 0.0 && dis_t < r.hitMin - 0.00001)
                         {
                             r.hitMin = dis_t;
                             hit = true;
@@ -507,7 +606,7 @@ bool intersectBVH(Ray r)
                     case 2:
                         Mesh mesh_t = getMesh(int(node.child_offset + i));
                         dis_t = hitMesh(mesh_t, r);
-                        if (dis_t > 0.0 && dis_t < r.hitMin)
+                        if (dis_t > 0.0 && dis_t < r.hitMin - 0.00001)
                         {
                             r.hitMin = dis_t;
                             hit = true;
@@ -519,7 +618,7 @@ bool intersectBVH(Ray r)
                     case 3:
                         Triangle tri_t = getTriangle(int(node.child_offset + i));
                         dis_t = hitTriangle(tri_t, r);
-                        if (dis_t > 0.0 && dis_t < r.hitMin)
+                        if (dis_t > 0.0 && dis_t < r.hitMin - 0.00001)
                         {
                             r.hitMin = dis_t;
                             hit = true;
@@ -531,12 +630,37 @@ bool intersectBVH(Ray r)
                     case 4:
                         Rect rect_t = getRect(int(node.child_offset + i));
                         dis_t = hitRect(rect_t, r);
-                        if (dis_t > 0.0 && dis_t < r.hitMin)
+                        if (dis_t > 0.0 && dis_t < r.hitMin - 0.00001)
                         {
                             r.hitMin = dis_t;
                             hit = true;
                             rect = rect_t;
                             hitShape = 4;
+                            selectMaterial(node, int(node.material));
+                        }
+                        break;
+                    case 5:
+                        boxVolume boxvolume_t = getBoxVolume(int(node.child_offset + i));
+                        dis_t = hitBoxVolume(boxvolume_t, r, true);
+
+                        float dis_t2 = hitBoxVolume(boxvolume_t, r, false);
+                        if (dis_t < 0.0)
+                        {
+                            dis_t = 0.00001;
+                        }
+                        if (dis_t2 > r.hitMin - 0.00001)
+                        {
+                            dis_t2 = r.hitMin - 0.00001;
+                        }
+
+                        float dist = dis_t2 - dis_t;
+                        float hit_dist = (-1.0 / node.constant) * log(rand());
+                        if (hit_dist < dist - 0.00001)
+                        {
+                            r.hitMin = dis_t + hit_dist;
+                            hit = true;
+                            boxvolume = boxvolume_t;
+                            hitShape = 5;
                             selectMaterial(node, int(node.material));
                         }
                         break;
@@ -623,6 +747,13 @@ bool intersectBVH(Ray r)
             rec.hitMin = r.hitMin;
             setNormal(r);
             break;
+        case 5:
+            rec.p = r.origin + r.hitMin * r.direction;
+            rec.normal = vec3(1.0);
+            rec.albedo = boxvolume.albedo;
+            rec.hitMin = r.hitMin;
+            rec.frontFace = true;
+            break;
         default:
             break;
         }
@@ -678,6 +809,10 @@ vec3 shading(Ray r)
                 rec.light = vec3(0.0, 0.0, 0.0);
                 r.direction = direction;
                 break;
+            case 5:
+                r.direction = isotropic();
+                rec.light = vec3(0.0, 0.0, 0.0);
+                break;
             }
 
             r.origin = rec.p;
@@ -696,6 +831,10 @@ vec3 shading(Ray r)
     if (!hit)
     {
         color *= vec3(0.0, 0.0, 0.0);
+    }
+    if (gamma)
+    {
+        return pow(color, vec3(1.0 / 2.2));
     }
     return color;
 }

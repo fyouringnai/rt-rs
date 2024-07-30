@@ -27,6 +27,7 @@ pub struct Renderer {
     last_frame: Instant,
     depths: f32,
     face_cull: bool,
+    gamma: bool,
     width: i32,
     height: i32,
 }
@@ -44,7 +45,7 @@ impl Renderer {
             "shaders/path_tracing.frag",
         );
         let screen_buffer = ScreenBuffer::new(&gl, 1600, 1200);
-        let model = unsafe { Model::new(&gl, "models/furina_b/furina.obj") };
+        let model = unsafe { Model::new(&gl, "models/furina_w/furina.obj") };
         let mut bvh_tree = BVHTree::new(&gl);
         let mut primitives = Vec::new();
         let basic_transform = vec![
@@ -131,7 +132,7 @@ impl Renderer {
         ];
         let ceiling_light = Object::new_rectangle(
             &ceiling_light_vert,
-            [5.0, 5.0, 5.0],
+            [7.0, 7.0, 7.0],
             &basic_transform,
             0.0,
             DIFFUSE_LIGHT,
@@ -176,6 +177,13 @@ impl Renderer {
             [0.0, 1.0, 0.0],
         ];
 
+        let box_volume_vert = vec![
+            [1.0, 0.0, 1.0],
+            [-1.0, 1.0, 1.0],
+            [-1.0, 0.0, -1.0],
+            [-1.0, 0.0, 1.0],
+        ];
+
         let box_tall_transform = vec![
             vec3(-0.4, 0.0, -0.35),
             vec3(0.0, 15.0, 0.0),
@@ -202,8 +210,37 @@ impl Renderer {
             DIELECTRIC,
         );
 
-        primitives.append(&mut box_tall);
-        primitives.append(&mut box_short);
+        let box_volume_tall_transform = vec![
+            vec3(-0.4, 0.01, -0.35),
+            vec3(0.0, 15.0, 0.0),
+            vec3(0.25, 1.2, 0.25),
+        ];
+
+        let box_volume_tall = Object::new_box_volume(
+            &box_volume_vert,
+            [1.0, 1.0, 1.0],
+            &box_volume_tall_transform,
+            2.0,
+            ISOTROPIC,
+        );
+
+        let box_volume_short_transform = vec![
+            vec3(0.3, 0.01, 0.45),
+            vec3(0.0, -18.0, 0.0),
+            vec3(0.35, 0.7, 0.35),
+        ];
+        let box_volume_short = Object::new_box_volume(
+            &box_volume_vert,
+            [0.0, 0.0, 0.0],
+            &box_volume_short_transform,
+            2.0,
+            ISOTROPIC,
+        );
+
+        //primitives.append(&mut box_tall);
+        //primitives.append(&mut box_short);
+        primitives.push(box_volume_short);
+        primitives.push(box_volume_tall);
         primitives.push(floor);
         primitives.push(right_wall);
         primitives.push(left_wall);
@@ -227,6 +264,7 @@ impl Renderer {
             last_frame: Instant::now(),
             depths: 0.0,
             face_cull: false,
+            gamma: false,
             width: 1600,
             height: 1200,
         };
@@ -245,6 +283,7 @@ impl Renderer {
         self.camera.render_loop = 0;
         self.depths = app.get_depths();
         self.face_cull = app.get_face_cull();
+        self.gamma = app.get_gamma();
         for _i in 0..app.get_sample_counts() as i32 {
             self.renderer_core(app);
         }
@@ -261,6 +300,12 @@ impl Renderer {
             self.camera.render_loop = 0;
             self.face_cull = app.get_face_cull();
         }
+        if self.gamma != app.get_gamma() {
+            self.camera.render_loop = 0;
+            self.gamma = app.get_gamma();
+        }
+        println!("render_loop: {}", self.camera.render_loop);
+        //println!("{}",-1.0/0.01*random_float().ln());
         self.renderer_core(app);
         self.renderer_draw();
     }
@@ -306,6 +351,7 @@ impl Renderer {
 
         self.shader.set_int(&self.gl, "depths", self.depths as i32);
         self.shader.set_bool(&self.gl, "faceCull", self.face_cull);
+        self.shader.set_bool(&self.gl, "gamma", self.gamma);
 
         self.screen.draw_shader(&self.gl, &self.shader);
 

@@ -156,6 +156,17 @@ impl BVHTree {
                     aabb =
                         AABB::new_rectangle(vertex, primitive.constant, primitive.material.clone());
                 }
+                SHAPE::RT_VOLUME => {
+                    let mut vertex = Vec::new();
+                    for i in 0..4 {
+                        vertex.push(primitive.vertices[i]);
+                    }
+                    aabb = AABB::new_box_volume(
+                        vertex,
+                        primitive.constant,
+                        primitive.material.clone(),
+                    );
+                }
             }
 
             primitive_info.push(BVHPrimitiveInfo::new(i as i32, aabb));
@@ -242,6 +253,20 @@ impl BVHTree {
                         vertex_data.push(primitive.albedo[i]);
                     }
                     for _i in 0..15 {
+                        vertex_data.push(0.0);
+                    }
+                    self.vertices_number += 1;
+                }
+                SHAPE::RT_VOLUME => {
+                    for vertex in &primitive.vertices {
+                        vertex_data.push(vertex[0]);
+                        vertex_data.push(vertex[1]);
+                        vertex_data.push(vertex[2]);
+                    }
+                    for i in 0..3 {
+                        vertex_data.push(primitive.albedo[i]);
+                    }
+                    for _i in 0..18 {
                         vertex_data.push(0.0);
                     }
                     self.vertices_number += 1;
@@ -353,42 +378,30 @@ impl BVHTree {
             }
             let dim = aabb_axis(&centroid_aabb);
 
-            if centroid_aabb.min[dim as usize] == centroid_aabb.max[dim as usize] {
-                let first_offset = ordered_primitives.len() as i32;
-                let mut primitive_number = 0;
-                for i in start..end {
-                    primitive_number = primitive_info[i as usize].primitive_number;
-                    ordered_primitives.push(self.primitives[primitive_number as usize].clone());
-                }
-                *total_nodes += 1;
-                node = BVHNode::new_leaf(primitives_number, first_offset, aabb);
-                node
-            } else {
-                let mid = (start + end) / 2;
+            let mid = (start + end) / 2;
 
-                partition_by_median(primitive_info, start, mid, end, dim);
+            partition_by_median(primitive_info, start, mid, end, dim);
 
-                *total_nodes += 1;
-                node = BVHNode::new_interior(
-                    Some(Rc::new(RefCell::from(self.recursive_build(
-                        primitive_info,
-                        start,
-                        mid,
-                        total_nodes,
-                        ordered_primitives,
-                    )))),
-                    Some(Rc::new(RefCell::from(self.recursive_build(
-                        primitive_info,
-                        mid,
-                        end,
-                        total_nodes,
-                        ordered_primitives,
-                    )))),
-                    aabb,
-                    dim,
-                );
-                node
-            }
+            *total_nodes += 1;
+            node = BVHNode::new_interior(
+                Some(Rc::new(RefCell::from(self.recursive_build(
+                    primitive_info,
+                    start,
+                    mid,
+                    total_nodes,
+                    ordered_primitives,
+                )))),
+                Some(Rc::new(RefCell::from(self.recursive_build(
+                    primitive_info,
+                    mid,
+                    end,
+                    total_nodes,
+                    ordered_primitives,
+                )))),
+                aabb,
+                dim,
+            );
+            node
         }
     }
 

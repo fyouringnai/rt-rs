@@ -1,5 +1,5 @@
 use crate::utils::MATERIAL::NONE;
-use crate::utils::SHAPE::{RT_MESH, RT_RECTANGLE, RT_SPHERE};
+use crate::utils::SHAPE::{RT_MESH, RT_RECTANGLE, RT_SPHERE, RT_VOLUME};
 use crate::utils::{MATERIAL, MAX_FLOAT, MIN_FLOAT, SHAPE};
 
 #[derive(Clone)]
@@ -90,6 +90,71 @@ impl AABB {
             constant,
             material,
         };
+
+        for vertex in vertices {
+            for i in 0..3 {
+                if vertex[i] < aabb.min[i] {
+                    aabb.min[i] = vertex[i];
+                }
+                if vertex[i] > aabb.max[i] {
+                    aabb.max[i] = vertex[i];
+                }
+            }
+        }
+
+        aabb
+    }
+
+    pub fn new_box_volume(vertices: Vec<[f32; 3]>, constant: f32, material: MATERIAL) -> AABB {
+        let mut aabb = AABB {
+            min: [MAX_FLOAT, MAX_FLOAT, MAX_FLOAT],
+            max: [MIN_FLOAT, MIN_FLOAT, MIN_FLOAT],
+            shape: RT_VOLUME,
+            constant,
+            material,
+        };
+
+        let length = [
+            vertices[0][0] - vertices[3][0],
+            vertices[0][1] - vertices[3][1],
+            vertices[0][2] - vertices[3][2],
+        ];
+        let width = [
+            vertices[1][0] - vertices[3][0],
+            vertices[1][1] - vertices[3][1],
+            vertices[1][2] - vertices[3][2],
+        ];
+        let height = [
+            vertices[2][0] - vertices[3][0],
+            vertices[2][1] - vertices[3][1],
+            vertices[2][2] - vertices[3][2],
+        ];
+        let vertices = vec![
+            [vertices[0][0], vertices[0][1], vertices[0][2]],
+            [vertices[1][0], vertices[1][1], vertices[1][2]],
+            [vertices[2][0], vertices[2][1], vertices[2][2]],
+            [vertices[3][0], vertices[3][1], vertices[3][2]],
+            [
+                vertices[3][0] + length[0] + width[0] + height[0],
+                vertices[3][1] + length[1] + width[1] + height[1],
+                vertices[3][2] + length[2] + width[2] + height[2],
+            ],
+            [
+                vertices[3][0] + length[0] + width[0],
+                vertices[3][1] + length[1] + width[1],
+                vertices[3][2] + length[2] + width[2],
+            ],
+            [
+                vertices[3][0] + length[0] + height[0],
+                vertices[3][1] + length[1] + height[1],
+                vertices[3][2] + length[2] + height[2],
+            ],
+            [
+                vertices[3][0] + width[0] + height[0],
+                vertices[3][1] + width[1] + height[1],
+                vertices[3][2] + width[2] + height[2],
+            ],
+        ];
 
         for vertex in vertices {
             for i in 0..3 {
